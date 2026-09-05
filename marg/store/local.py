@@ -26,3 +26,12 @@ class LocalStore:
         path = directory / name
         path.write_text(json.dumps(value, indent=2), encoding="utf-8")
         return path
+
+    def save_work_order(self, survey_id: str, work_order_id: str, value: dict[str, object]) -> Path:
+        return self.save_json(survey_id, f"work_order_{work_order_id}.json", value)
+
+    def save_resurvey(self, survey_id: str, resurvey_id: str, value: dict[str, object]) -> Path:
+        return self.save_json(survey_id, f"resurvey_{resurvey_id}.json", value)
+
+    def save_dismissal(self, survey_id: str, instance_id: int, value: dict[str, object]) -> Path:
+        return self.save_json(survey_id, f"dismissal_{instance_id}.json", value)

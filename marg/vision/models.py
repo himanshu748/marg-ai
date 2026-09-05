@@ -52,6 +52,7 @@ class SurveyInstance(BaseModel):
     lon: float
     keyframe_ids: list[int] = Field(default_factory=list)
     frame_confs: list[float] = Field(default_factory=list)
+    frame_classes: list[str] = Field(default_factory=list)
 
 
 class Segment(BaseModel):

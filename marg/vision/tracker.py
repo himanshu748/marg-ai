@@ -111,3 +111,7 @@ class InstanceTracker:
     def summarize(track: _Track) -> tuple[str, float, list[float]]:
         class_name = Counter(track.classes).most_common(1)[0][0]
         return class_name, max(track.confidences, default=0.0), track.confidences
+
+    @staticmethod
+    def classes(track: _Track) -> list[str]:
+        return track.classes.copy()

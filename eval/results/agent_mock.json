@@ -1,0 +1,128 @@
+[
+  {
+    "scenario": "S1",
+    "pass": true,
+    "tool_calls": 4,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "inspect_roi",
+      "model",
+      "draft_work_order",
+      "model",
+      "request_human_approval",
+      "model",
+      "finalize"
+    ]
+  },
+  {
+    "scenario": "S2",
+    "pass": true,
+    "tool_calls": 3,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "draft_work_order",
+      "model",
+      "request_human_approval",
+      "model",
+      "finalize"
+    ]
+  },
+  {
+    "scenario": "S3",
+    "pass": true,
+    "tool_calls": 2,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "draft_work_order",
+      "model",
+      "finalize"
+    ]
+  },
+  {
+    "scenario": "S4",
+    "pass": true,
+    "tool_calls": 4,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "compare_frames",
+      "model",
+      "dismiss_instance",
+      "model",
+      "request_resurvey",
+      "model",
+      "finalize"
+    ]
+  },
+  {
+    "scenario": "S5",
+    "pass": true,
+    "tool_calls": 1,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "finalize"
+    ]
+  },
+  {
+    "scenario": "S6",
+    "pass": true,
+    "tool_calls": 25,
+    "forced_finalize": false,
+    "tools": [
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "inspect_roi",
+      "model",
+      "finalize"
+    ]
+  }
+]

@@ -30,7 +30,7 @@ class DNNDetector:
         class_ids: list[int] = []
         raw: list[tuple[list[int], float, int]] = []
         for row in rows:
-            if row.shape[0] < 5 + len(self.config.classes):
+            if row.shape[0] < 4 + len(self.config.classes):
                 continue
             class_scores = row[4 : 4 + len(self.config.classes)]
             class_id = int(np.argmax(class_scores))

@@ -12,6 +12,7 @@ dependencies = [
   "numpy",
   "pydantic>=2",
   "gpxpy",
+  "boto3",
 ]
 
 [project.optional-dependencies]
@@ -21,4 +22,4 @@ dev = ["pytest"]
 testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
-include = ["marg*"]
+include = ["marg*", "eval*"]

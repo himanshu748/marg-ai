@@ -129,6 +129,7 @@ def run(
             lon=lon,
             keyframe_ids=track.keyframe_ids,
             frame_confs=frame_confs,
+            frame_classes=tracker.classes(track),
         )
         instances.append(instance)
         crop_path = output_dir / "crops" / f"inst_{track.instance_id:04d}.jpg"
