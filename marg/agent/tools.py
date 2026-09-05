@@ -98,13 +98,19 @@ class ToolSet:
         instance = self._instance(instance_id)
         if instance is None:
             return {"detections": [], "confirmed": False, "error": "instance not found"}
-        source = self._best_keyframe(instance)
+        source = self._evidence_path(instance) or self._best_keyframe(instance)
         if source is None:
             return {"detections": [], "confirmed": False, "error": "keyframe not found"}
         image = cv2.imread(str(source))
         if image is None:
             return {"detections": [], "confirmed": False, "error": "keyframe unreadable"}
-        x, y, width, height = instance.bbox
+        observation = max(
+            instance.observations,
+            key=lambda item: item.fused_conf,
+            default=None,
+        )
+        bbox = observation.bbox if observation is not None else instance.bbox
+        x, y, width, height = bbox
         expand_width = width * 1.5
         expand_height = height * 1.5
         x0 = max(0, round(x + width / 2.0 - expand_width / 2.0))
@@ -134,16 +140,19 @@ class ToolSet:
             item["class"] == instance.class_name and float(item["conf"]) >= 0.5
             for item in detections
         )
-        return {"detections": detections, "confirmed": confirmed, "crop_path": str(crop_path)}
+        return {"detections": detections, "confirmed": confirmed, "crop_path": crop_path.name}
 
     def compare_frames(self, instance_id: int) -> dict[str, object]:
         instance = self._instance(instance_id)
         if instance is None:
             return {"frame_confs": [], "classes_seen": [], "agreement_ratio": 0.0}
-        classes = instance.frame_classes or [instance.class_name] * len(instance.frame_confs)
+        frame_confs = [observation.conf for observation in instance.observations]
+        classes = [observation.class_name for observation in instance.observations]
+        frame_confs = frame_confs or instance.frame_confs
+        classes = classes or instance.frame_classes or [instance.class_name] * len(frame_confs)
         agreement = max(Counter(classes).values(), default=0) / max(1, len(classes))
         return {
-            "frame_confs": instance.frame_confs,
+            "frame_confs": frame_confs,
             "classes_seen": classes,
             "agreement_ratio": agreement,
         }
@@ -204,6 +213,13 @@ class ToolSet:
 
     def _instance(self, instance_id: int) -> SurveyInstance | None:
         return next((item for item in self.context.result.instances if item.id == instance_id), None)
+
+    @staticmethod
+    def _evidence_path(instance: SurveyInstance) -> Path | None:
+        if instance.evidence_path is None:
+            return None
+        path = Path(instance.evidence_path)
+        return path if path.is_file() else None
 
     def _best_keyframe(self, instance: SurveyInstance) -> Path | None:
         for path in self.context.result.keyframe_paths:

@@ -68,7 +68,11 @@ def create_app(data_root: Path | str) -> FastAPI:
                         work_order.update(decision)
         return value
 
-    def safe_media(survey_id: str, category: Literal["keyframes", "crops"], name: str) -> Path:
+    def safe_media(
+        survey_id: str,
+        category: Literal["keyframes", "crops", "evidence", "agent_crops"],
+        name: str,
+    ) -> Path:
         directory = survey_dir(survey_id)
         if Path(name).name != name:
             raise HTTPException(status_code=404, detail="Media not found")
@@ -137,6 +141,14 @@ def create_app(data_root: Path | str) -> FastAPI:
     @app.get("/api/surveys/{survey_id}/crops/{name}")
     def get_crop(survey_id: str, name: str) -> FileResponse:
         return FileResponse(safe_media(survey_id, "crops", name))
+
+    @app.get("/api/surveys/{survey_id}/evidence/{name}")
+    def get_evidence(survey_id: str, name: str) -> FileResponse:
+        return FileResponse(safe_media(survey_id, "evidence", name))
+
+    @app.get("/api/surveys/{survey_id}/agent_crops/{name}")
+    def get_agent_crop(survey_id: str, name: str) -> FileResponse:
+        return FileResponse(safe_media(survey_id, "agent_crops", name))
 
     @app.post("/api/surveys/{survey_id}/work_orders/{work_order_id}/decision")
     def decide_work_order(

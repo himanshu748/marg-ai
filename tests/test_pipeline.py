@@ -11,3 +11,7 @@ def test_pipeline_end_to_end(tmp_path: Path) -> None:
     assert result.frames > 0
     assert result.geo_source == "synthetic"
     assert (tmp_path / "out" / "result.json").exists()
+    assert all(
+        instance.evidence_path is not None and Path(instance.evidence_path).exists()
+        for instance in result.instances
+    )

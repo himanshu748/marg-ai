@@ -34,10 +34,21 @@ class Keyframe:
     frame: object
 
 
+class Observation(BaseModel):
+    frame_idx: int
+    t_s: float
+    bbox: list[float]
+    class_name: str
+    conf: float
+    fused_conf: float
+
+
 @dataclass(slots=True)
 class TrackUpdate:
     instance_id: int
     detection: Detection
+    observation: Observation
+    best_observation: Observation | None = None
 
 
 class SurveyInstance(BaseModel):
@@ -53,6 +64,9 @@ class SurveyInstance(BaseModel):
     keyframe_ids: list[int] = Field(default_factory=list)
     frame_confs: list[float] = Field(default_factory=list)
     frame_classes: list[str] = Field(default_factory=list)
+    observations: list[Observation] = Field(default_factory=list)
+    best_frame_idx: int = -1
+    evidence_path: str | None = None
 
 
 class Segment(BaseModel):

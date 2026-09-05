@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .config import VisionConfig
-from .models import Detection, TrackUpdate
+from .models import Detection, Observation, TrackUpdate
 
 
 @dataclass(slots=True)
@@ -15,6 +15,8 @@ class _Track:
     confidences: list[float] = field(default_factory=list)
     fused_conf: float = 0.0
     keyframe_ids: list[int] = field(default_factory=list)
+    observations: list[Observation] = field(default_factory=list)
+    best_observation: Observation | None = None
     unseen_keyframes: int = 0
     lat: float = 0.0
     lon: float = 0.0
@@ -46,6 +48,8 @@ class InstanceTracker:
         flow: np.ndarray | None = None,
         lat: float = 0.0,
         lon: float = 0.0,
+        frame_idx: int = 0,
+        t_s: float = 0.0,
     ) -> list[TrackUpdate]:
         predicted = {track_id: self._warp(track.bbox, flow) for track_id, track in self._tracks.items()}
         available = set(predicted)
@@ -64,6 +68,19 @@ class InstanceTracker:
                 self._tracks[best_id] = _Track(instance_id=best_id, bbox=detection.bbox)
             track = self._tracks[best_id]
             track.bbox = detection.bbox
+            observation = Observation(
+                frame_idx=frame_idx,
+                t_s=t_s,
+                bbox=[float(value) for value in detection.bbox],
+                class_name=detection.class_name,
+                conf=detection.confidence,
+                fused_conf=detection.fused_conf,
+            )
+            best_observation = None
+            if track.best_observation is None or observation.fused_conf > track.best_observation.fused_conf:
+                track.best_observation = observation
+                best_observation = observation
+            track.observations.append(observation)
             track.classes.append(detection.class_name)
             track.confidences.append(detection.confidence)
             track.fused_conf = max(track.fused_conf, detection.fused_conf)
@@ -72,7 +89,14 @@ class InstanceTracker:
             if keyframe_id is not None and (not track.keyframe_ids or track.keyframe_ids[-1] != keyframe_id):
                 track.keyframe_ids.append(keyframe_id)
             assigned.add(best_id)
-            updates.append(TrackUpdate(instance_id=best_id, detection=detection))
+            updates.append(
+                TrackUpdate(
+                    instance_id=best_id,
+                    detection=detection,
+                    observation=observation,
+                    best_observation=best_observation,
+                )
+            )
         if keyframe_id is not None:
             for track_id, track in list(self._tracks.items()):
                 if track_id not in assigned:
@@ -110,8 +134,10 @@ class InstanceTracker:
     @staticmethod
     def summarize(track: _Track) -> tuple[str, float, list[float]]:
         class_name = Counter(track.classes).most_common(1)[0][0]
-        return class_name, max(track.confidences, default=0.0), track.confidences
+        return class_name, max(track.confidences, default=0.0), [
+            observation.conf for observation in track.observations
+        ]
 
     @staticmethod
     def classes(track: _Track) -> list[str]:
-        return track.classes.copy()
+        return [observation.class_name for observation in track.observations]

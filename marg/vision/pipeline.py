@@ -31,6 +31,7 @@ def run(
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "keyframes").mkdir(exist_ok=True)
     (output_dir / "crops").mkdir(exist_ok=True)
+    (output_dir / "evidence").mkdir(exist_ok=True)
     model_path = config.model_file(Path(__file__).resolve().parents[2])
     detector = DNNDetector(model_path, config)
     selector = KeyframeSelector(config)
@@ -42,7 +43,8 @@ def run(
     crop_paths: list[str] = []
     detections_by_class = {class_name: 0 for class_name in config.classes}
     previous_gray: np.ndarray | None = None
-    latest_frames: dict[int, np.ndarray] = {}
+    best_frames: dict[int, np.ndarray] = {}
+    evidence_paths: dict[int, str] = {}
     stage_times = {"decode": 0.0, "quality": 0.0, "keyframes": 0.0, "detect": 0.0, "track": 0.0}
     keyframe_id_for_frame: int | None = None
     example_keyframes: list[tuple[int, np.ndarray, list[tuple[int, Detection]]]] = []
@@ -92,10 +94,22 @@ def run(
             detections_by_class[detection.class_name] += 1
         lat, lon = geo.sample(packet.timestamp_s)
         track_started = time.perf_counter()
-        updates = tracker.update(detections, keyframe_id_for_frame, flow, lat, lon)
+        updates = tracker.update(
+            detections,
+            keyframe_id_for_frame,
+            flow,
+            lat,
+            lon,
+            frame_idx=packet.index,
+            t_s=packet.timestamp_s,
+        )
         stage_times["track"] += time.perf_counter() - track_started
         for update in updates:
-            latest_frames[update.instance_id] = packet.frame.copy()
+            if update.best_observation is not None:
+                best_frames[update.instance_id] = packet.frame.copy()
+                evidence_path = output_dir / "evidence" / f"inst_{update.instance_id:04d}.jpg"
+                cv2.imwrite(str(evidence_path), packet.frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                evidence_paths[update.instance_id] = str(evidence_path)
         if keyframe is not None:
             annotated = keyframe.frame.copy()
             update_by_detection = {id(update.detection): update.instance_id for update in updates}
@@ -114,10 +128,16 @@ def run(
     for track in tracker.finalize():
         class_name, confidence, frame_confs = tracker.summarize(track)
         lat, lon = track.lat, track.lon
-        area = bbox_area_m2(track.bbox, config.target_width, int(config.target_width * 9 / 16), config)
+        best_observation = track.best_observation
+        best_bbox = (
+            tuple(best_observation.bbox)
+            if best_observation is not None
+            else track.bbox
+        )
+        area = bbox_area_m2(best_bbox, config.target_width, int(config.target_width * 9 / 16), config)
         instance = SurveyInstance(
             id=track.instance_id,
-            bbox=[float(value) for value in track.bbox],
+            bbox=[float(value) for value in best_bbox],
             class_name=class_name,
             confidence=confidence,
             fused_conf=track.fused_conf,
@@ -128,10 +148,13 @@ def run(
             keyframe_ids=track.keyframe_ids,
             frame_confs=frame_confs,
             frame_classes=tracker.classes(track),
+            observations=track.observations,
+            best_frame_idx=best_observation.frame_idx if best_observation is not None else -1,
+            evidence_path=evidence_paths.get(track.instance_id),
         )
         instances.append(instance)
         crop_path = output_dir / "crops" / f"inst_{track.instance_id:04d}.jpg"
-        _save_crop(latest_frames.get(track.instance_id), track.bbox, crop_path)
+        _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
         if crop_path.exists():
             crop_paths.append(str(crop_path))
     segments = cluster_instances(instances, config.geo_cluster_radius_m)

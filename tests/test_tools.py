@@ -46,4 +46,4 @@ def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:
     output = ToolSet(context).inspect_roi(1)
     assert output["confirmed"] is True
     assert output["detections"]
-    assert Path(str(output["crop_path"])).exists()
+    assert (root.parent / "agent_crops" / str(output["crop_path"])).exists()
