@@ -29,7 +29,7 @@ def _write_fixture(root: Path) -> None:
         instances=[
             SurveyInstance(
                 id=0,
-                bbox=[450, 100, 600, 300],
+                bbox=[572, 186, 352, 118],
                 class_name="D40",
                 confidence=0.4,
                 fused_conf=0.4,
@@ -40,12 +40,12 @@ def _write_fixture(root: Path) -> None:
                 keyframe_ids=[0],
                 frame_confs=[0.4],
                 frame_classes=["D40"],
-                evidence_path=str(survey / "evidence" / "inst_0000.jpg"),
+                evidence_path="evidence/inst_0000.jpg",
             )
         ],
         segments=[Segment(id=0, instance_ids=[0], lat=28.6139, lon=77.209, radius_m=25)],
-        keyframe_paths=[str(survey / "keyframes" / "kf_00000.jpg")],
-        crop_paths=[str(survey / "crops" / "inst_0000.jpg")],
+        keyframe_paths=["keyframes/kf_00000.jpg"],
+        crop_paths=["crops/inst_0000.jpg"],
         metrics={"runtime_s": 1.25},
     )
     (survey / "result.json").write_text(result.model_dump_json(indent=2), encoding="utf-8")
@@ -76,6 +76,11 @@ def test_api_dashboard_endpoints(tmp_path: Path) -> None:
         time.sleep(0.1)
     assert agent is not None
     assert agent["work_orders"]
+    work_order = agent["work_orders"][0]
+    assert work_order["title"]
+    assert work_order["reason"]
+    assert work_order["instance_ids"]
+    assert work_order["instances"][0]["evidence"] == "inst_0000.jpg"
     trace = client.get("/api/surveys/demo/trace")
     assert trace.status_code == 200
     assert trace.json()
@@ -86,7 +91,7 @@ def test_api_dashboard_endpoints(tmp_path: Path) -> None:
     crop_name = inspect_entries[0]["output"]["crop_path"]
     assert client.get(f"/api/surveys/demo/agent_crops/{crop_name}").status_code == 200
 
-    work_order_id = agent["work_orders"][0]["work_order_id"]
+    work_order_id = work_order["work_order_id"]
     decision = client.post(
         f"/api/surveys/demo/work_orders/{work_order_id}/decision",
         json={"decision": "approve", "note": "Reviewed in dashboard"},

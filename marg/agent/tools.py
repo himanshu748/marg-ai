@@ -13,7 +13,7 @@ TOOL_SPECS: list[dict[str, object]] = [
     {
         "toolSpec": {
             "name": "inspect_roi",
-            "description": "Re-detect one uncertain damage instance on an expanded, upscaled best keyframe crop.",
+            "description": "Re-detect one uncertain damage instance in a context-aware evidence crop.",
             "inputSchema": {"json": {"type": "object", "properties": {"instance_id": {"type": "integer"}}, "required": ["instance_id"]}},
         }
     },
@@ -35,7 +35,7 @@ TOOL_SPECS: list[dict[str, object]] = [
         "toolSpec": {
             "name": "draft_work_order",
             "description": "Draft a municipal work order for a road segment.",
-            "inputSchema": {"json": {"type": "object", "properties": {"segment_id": {"type": "integer"}, "priority": {"type": "string", "enum": ["low", "medium", "high"]}, "summary": {"type": "string"}}, "required": ["segment_id", "priority", "summary"]}},
+            "inputSchema": {"json": {"type": "object", "properties": {"segment_id": {"type": "integer"}, "priority": {"type": "string", "enum": ["low", "medium", "high"]}, "summary": {"type": "string"}, "reason": {"type": "string"}}, "required": ["segment_id", "priority", "summary", "reason"]}},
         }
     },
     {
@@ -111,36 +111,74 @@ class ToolSet:
         )
         bbox = observation.bbox if observation is not None else instance.bbox
         x, y, width, height = bbox
-        expand_width = width * 1.5
-        expand_height = height * 1.5
-        x0 = max(0, round(x + width / 2.0 - expand_width / 2.0))
-        y0 = max(0, round(y + height / 2.0 - expand_height / 2.0))
-        x1 = min(image.shape[1], round(x + width / 2.0 + expand_width / 2.0))
-        y1 = min(image.shape[0], round(y + height / 2.0 + expand_height / 2.0))
+        side = max(width * 3.0, height * 3.0, 320.0)
+        center_x, center_y = x + width / 2.0, y + height / 2.0
+        x0 = max(0, min(image.shape[1] - 1, round(center_x - side / 2.0)))
+        y0 = max(0, min(image.shape[0] - 1, round(center_y - side / 2.0)))
+        x1 = min(image.shape[1], max(x0 + 1, round(center_x + side / 2.0)))
+        y1 = min(image.shape[0], max(y0 + 1, round(center_y + side / 2.0)))
+        x0 = max(0, x1 - round(side)) if x1 == image.shape[1] else x0
+        y0 = max(0, y1 - round(side)) if y1 == image.shape[0] else y0
         crop = image[y0:y1, x0:x1]
         if crop.size == 0:
             return {"detections": [], "confirmed": False, "error": "empty crop"}
-        upscaled = cv2.resize(crop, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+        scale = 640.0 / max(crop.shape[:2])
+        interpolation = cv2.INTER_CUBIC if scale > 1.0 else cv2.INTER_AREA
+        resized = cv2.resize(crop, None, fx=scale, fy=scale, interpolation=interpolation)
         crop_dir = self.context.keyframe_dir.parent / "agent_crops"
         crop_dir.mkdir(parents=True, exist_ok=True)
         crop_path = crop_dir / f"inspect_inst_{instance_id:04d}.jpg"
-        cv2.imwrite(str(crop_path), upscaled, [cv2.IMWRITE_JPEG_QUALITY, 92])
         detections: list[dict[str, object]] = []
-        for detection in self.context.detector.detect(upscaled):
+        mapped_detections: list[tuple[dict[str, object], float]] = []
+        for detection in self.context.detector.detect(resized):
             mapped = [
-                float(x0 + detection.bbox[0] / 2.0),
-                float(y0 + detection.bbox[1] / 2.0),
-                float(detection.bbox[2] / 2.0),
-                float(detection.bbox[3] / 2.0),
+                float(x0 + detection.bbox[0] / scale),
+                float(y0 + detection.bbox[1] / scale),
+                float(detection.bbox[2] / scale),
+                float(detection.bbox[3] / scale),
             ]
-            detections.append(
-                {"class": detection.class_name, "conf": detection.confidence, "bbox": mapped}
-            )
-        confirmed = any(
-            item["class"] == instance.class_name and float(item["conf"]) >= 0.5
-            for item in detections
+            item = {"class": detection.class_name, "conf": detection.confidence, "bbox": mapped}
+            detections.append(item)
+            mapped_detections.append((item, _bbox_iou(tuple(bbox), tuple(mapped))))
+        annotated = resized.copy()
+        for item, _ in mapped_detections:
+            mapped = item["bbox"]
+            dx, dy, dw, dh = [round((float(value) - (x0 if index % 2 == 0 else y0)) * scale) for index, value in enumerate(mapped)]
+            cv2.rectangle(annotated, (dx, dy), (dx + round(dw), dy + round(dh)), (0, 220, 0), 2)
+            cv2.putText(annotated, f"{item['class']} {float(item['conf']):.2f}", (dx, max(16, dy - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 0), 1)
+        original = [
+            round((value - (x0 if index % 2 == 0 else y0)) * scale)
+            for index, value in enumerate(bbox)
+        ]
+        cv2.rectangle(
+            annotated,
+            (original[0], original[1]),
+            (original[0] + original[2], original[1] + original[3]),
+            (0, 0, 255),
+            2,
         )
-        return {"detections": detections, "confirmed": confirmed, "crop_path": crop_path.name}
+        cv2.imwrite(str(crop_path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 92])
+        matching = [(item, overlap) for item, overlap in mapped_detections if item["class"] == instance.class_name]
+        best_match, best_iou = max(
+            matching,
+            key=lambda pair: float(pair[0]["conf"]),
+            default=({"conf": 0.0}, 0.0),
+        )
+        confirmed = any(
+            (
+                float(item["conf"]) >= 0.5
+                or float(item["conf"]) >= instance.confidence + 0.10
+            )
+            and overlap >= 0.3
+            for item, overlap in matching
+        )
+        return {
+            "detections": detections,
+            "confirmed": confirmed,
+            "best_match_conf": float(best_match.get("conf", 0.0)),
+            "iou": float(best_iou),
+            "crop_path": crop_path.name,
+        }
 
     def compare_frames(self, instance_id: int) -> dict[str, object]:
         instance = self._instance(instance_id)
@@ -169,15 +207,59 @@ class ToolSet:
         self.context.store.save_resurvey(self.context.result.survey_id, resurvey_id, value)
         return value
 
-    def draft_work_order(self, segment_id: int, priority: str, summary: str) -> dict[str, object]:
+    def draft_work_order(
+        self,
+        segment_id: int,
+        priority: str,
+        summary: str,
+        reason: str = "",
+    ) -> dict[str, object]:
         if priority not in {"low", "medium", "high"}:
             return {"error": "priority must be low, medium, or high"}
+        segment = next((item for item in self.context.result.segments if item.id == segment_id), None)
+        instance_ids = segment.instance_ids if segment is not None else []
+        instances = [
+            item for item in self.context.result.instances if item.id in instance_ids
+        ]
+        total_area = sum(item.area_m2 for item in instances)
+        max_severity = max((item.severity for item in instances), default=0)
+        class_counts = Counter(item.class_name for item in instances)
+        class_text = ", ".join(
+            f"{count} {class_name}" for class_name, count in sorted(class_counts.items())
+        )
+        is_potholes = set(class_counts) == {"D40"}
+        noun = (
+            "pothole" if len(instances) == 1 else "potholes"
+        ) if is_potholes else "road defects"
+        title = (
+            f"Pothole repair — {class_text} {noun}, "
+            f"~{round(total_area)} m², sev {max_severity}"
+            if is_potholes
+            else f"Road repair — {class_text} {noun}, ~{round(total_area)} m², sev {max_severity}"
+        )
+        instance_details = [
+            {
+                "id": item.id,
+                "class": item.class_name,
+                "severity": item.severity,
+                "area_m2": item.area_m2,
+                "fused_conf": item.fused_conf,
+                "lat": item.lat,
+                "lon": item.lon,
+                "evidence": Path(item.evidence_path).name if item.evidence_path else None,
+            }
+            for item in instances
+        ]
         work_order_id = uuid.uuid4().hex
         value: dict[str, object] = {
             "work_order_id": work_order_id,
             "segment_id": segment_id,
+            "instance_ids": instance_ids,
+            "instances": instance_details,
             "priority": priority,
+            "title": title,
             "summary": summary,
+            "reason": reason,
             "status": "draft",
             "approval_requested": False,
         }
@@ -214,23 +296,44 @@ class ToolSet:
     def _instance(self, instance_id: int) -> SurveyInstance | None:
         return next((item for item in self.context.result.instances if item.id == instance_id), None)
 
-    @staticmethod
-    def _evidence_path(instance: SurveyInstance) -> Path | None:
+    def _evidence_path(self, instance: SurveyInstance) -> Path | None:
         if instance.evidence_path is None:
             return None
         path = Path(instance.evidence_path)
+        if not path.is_absolute():
+            path = self.context.keyframe_dir.parent / path
         return path if path.is_file() else None
 
     def _best_keyframe(self, instance: SurveyInstance) -> Path | None:
         for path in self.context.result.keyframe_paths:
-            if any(f"kf_{keyframe_id:05d}" in Path(path).name for keyframe_id in instance.keyframe_ids):
-                return Path(path)
+            resolved = self._resolve_path(path)
+            if any(f"kf_{keyframe_id:05d}" in resolved.name for keyframe_id in instance.keyframe_ids):
+                return resolved
         for keyframe_id in instance.keyframe_ids:
             path = self.context.keyframe_dir / f"kf_{keyframe_id:05d}.jpg"
             if path.exists():
                 return path
         for candidate in self.context.result.keyframe_paths:
-            path = Path(candidate)
+            path = self._resolve_path(candidate)
             if path.exists():
                 return path
         return None
+
+    def _resolve_path(self, value: str) -> Path:
+        path = Path(value)
+        return path if path.is_absolute() else self.context.keyframe_dir.parent / path
+
+
+def _bbox_iou(
+    first: tuple[float, float, float, float],
+    second: tuple[float, float, float, float],
+) -> float:
+    ax0, ay0, aw, ah = first
+    bx0, by0, bw, bh = second
+    ax1, ay1 = ax0 + aw, ay0 + ah
+    bx1, by1 = bx0 + bw, by0 + bh
+    ix0, iy0 = max(ax0, bx0), max(ay0, by0)
+    ix1, iy1 = min(ax1, bx1), min(ay1, by1)
+    intersection = max(0.0, ix1 - ix0) * max(0.0, iy1 - iy0)
+    union = aw * ah + bw * bh - intersection
+    return intersection / union if union > 0 else 0.0

@@ -109,7 +109,7 @@ def run(
                 best_frames[update.instance_id] = packet.frame.copy()
                 evidence_path = output_dir / "evidence" / f"inst_{update.instance_id:04d}.jpg"
                 cv2.imwrite(str(evidence_path), packet.frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
-                evidence_paths[update.instance_id] = str(evidence_path)
+                evidence_paths[update.instance_id] = str(evidence_path.relative_to(output_dir))
         if keyframe is not None:
             annotated = keyframe.frame.copy()
             update_by_detection = {id(update.detection): update.instance_id for update in updates}
@@ -120,7 +120,7 @@ def run(
                 rendered.append((instance_id, detection))
             path = output_dir / "keyframes" / f"kf_{keyframe.keyframe_id:05d}.jpg"
             cv2.imwrite(str(path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
-            keyframe_paths.append(str(path))
+            keyframe_paths.append(str(path.relative_to(output_dir)))
             if len(example_keyframes) < 6:
                 example_keyframes.append((keyframe.keyframe_id, annotated, rendered))
         previous_gray = current_gray
@@ -156,7 +156,7 @@ def run(
         crop_path = output_dir / "crops" / f"inst_{track.instance_id:04d}.jpg"
         _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
         if crop_path.exists():
-            crop_paths.append(str(crop_path))
+            crop_paths.append(str(crop_path.relative_to(output_dir)))
     segments = cluster_instances(instances, config.geo_cluster_radius_m)
     metrics = {
         "runtime_s": time.perf_counter() - started,

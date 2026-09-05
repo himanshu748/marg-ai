@@ -199,7 +199,16 @@ class MockLLM:
                     return self._call(
                         f"Escalate segment {segment_id} under policy rule 3.",
                         "draft_work_order",
-                        {"segment_id": segment_id, "priority": priority, "summary": f"Road damage severity {instance.severity}."},
+                        {
+                            "segment_id": segment_id,
+                            "priority": priority,
+                            "summary": f"Road damage severity {instance.severity}.",
+                            "reason": (
+                                f"{instance.class_name} instance {instance.id} has "
+                                f"severity {instance.severity} and fused confidence "
+                                f"{instance.fused_conf:.2f}."
+                            ),
+                        },
                     )
         for segment in self.result.segments:
             if segment.id in self.work_ordered:
@@ -209,7 +218,15 @@ class MockLLM:
                 return self._call(
                     f"Draft one low-priority order for segment {segment.id} under policy rule 4.",
                     "draft_work_order",
-                    {"segment_id": segment.id, "priority": "low", "summary": "Multiple low-severity road defects."},
+                    {
+                        "segment_id": segment.id,
+                        "priority": "low",
+                        "summary": "Multiple low-severity road defects.",
+                        "reason": (
+                            f"Segment {segment.id} contains {len(segment_instances)} "
+                            "low-severity observations."
+                        ),
+                    },
                 )
         for work_order in self._drafts(messages):
             work_order_id = str(work_order.get("work_order_id", ""))

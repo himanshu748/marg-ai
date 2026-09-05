@@ -9,7 +9,6 @@ from marg.vision.models import Segment, SurveyInstance, SurveyResult
 
 def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:
     root = Path(__file__).parent / "fixtures"
-    fixture = root / "pothole_bengaluru.jpg"
     result = SurveyResult(
         survey_id="tool-test",
         video="synthetic",
@@ -21,7 +20,7 @@ def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:
         instances=[
             SurveyInstance(
                 id=1,
-                bbox=[450.0, 100.0, 600.0, 300.0],
+                bbox=[572.0, 186.0, 352.0, 118.0],
                 class_name="D40",
                 confidence=0.4,
                 fused_conf=0.4,
@@ -35,7 +34,7 @@ def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:
             )
         ],
         segments=[Segment(id=0, instance_ids=[1], lat=28.6, lon=77.2, radius_m=25)],
-        keyframe_paths=[str(fixture)],
+        keyframe_paths=["fixtures/pothole_bengaluru.jpg"],
     )
     context = ToolContext(
         result=result,
@@ -46,4 +45,6 @@ def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:
     output = ToolSet(context).inspect_roi(1)
     assert output["confirmed"] is True
     assert output["detections"]
+    assert float(output["best_match_conf"]) >= 0.5
+    assert float(output["iou"]) >= 0.3
     assert (root.parent / "agent_crops" / str(output["crop_path"])).exists()
