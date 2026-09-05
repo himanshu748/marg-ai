@@ -11,3 +11,4 @@ out/
 *.avi
 *.mov
 !tests/fixtures/clip3s.mp4
+tests/agent_crops/

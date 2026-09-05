@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-api = ["fastapi", "uvicorn"]
+api = ["fastapi", "uvicorn", "python-multipart"]
 dev = ["pytest", "ruff", "httpx2"]
 
 [tool.pytest.ini_options]
