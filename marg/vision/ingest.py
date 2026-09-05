@@ -1,5 +1,6 @@
 from collections.abc import Iterator
 from pathlib import Path
+import time
 
 import cv2
 
@@ -11,6 +12,7 @@ class VideoSource:
     def __init__(self, video_path: str | Path, config: VisionConfig) -> None:
         self.video_path = str(video_path)
         self.config = config
+        self.last_decode_s = 0.0
 
     def __iter__(self) -> Iterator[FramePacket]:
         capture = cv2.VideoCapture(self.video_path)
@@ -20,7 +22,9 @@ class VideoSource:
         index = 0
         try:
             while True:
+                started = time.perf_counter()
                 ok, frame = capture.read()
+                self.last_decode_s = time.perf_counter() - started
                 if not ok:
                     break
                 timestamp_ms = float(capture.get(cv2.CAP_PROP_POS_MSEC))

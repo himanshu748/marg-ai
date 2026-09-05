@@ -47,7 +47,9 @@ def run(
     stage_times = {"decode": 0.0, "quality": 0.0, "keyframes": 0.0, "detect": 0.0, "track": 0.0}
     keyframe_id_for_frame: int | None = None
     example_keyframes: list[tuple[int, np.ndarray, list[tuple[int, Detection]]]] = []
-    for packet in VideoSource(video_path, config):
+    source = VideoSource(video_path, config)
+    for packet in source:
+        stage_times["decode"] += source.last_decode_s
         frame_count = packet.index + 1
         if packet.index % config.frame_stride != 0:
             continue
