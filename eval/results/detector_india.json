@@ -1,0 +1,54 @@
+{
+  "source": "TamAko783/Unified_Road_Defect_Dataset RDD-2022 India subset",
+  "images": 600,
+  "ground_truth_boxes": 1279,
+  "predictions": 15027,
+  "iou_threshold": 0.5,
+  "ap_method": "all-point interpolated AP over confidence-ranked detections",
+  "ap50": {
+    "D00": 0.6819003801067757,
+    "D10": 0.7032828282828283,
+    "D20": 0.8592896818890685,
+    "D40": 0.7115633166713274
+  },
+  "map50": 0.7390090517374999,
+  "production_threshold": 0.25,
+  "precision": 0.8375586854460094,
+  "recall": 0.6974198592650508,
+  "counts": {
+    "D00": {
+      "tp": 156,
+      "fp": 44,
+      "fn": 91
+    },
+    "D10": {
+      "tp": 4,
+      "fp": 2,
+      "fn": 7
+    },
+    "D20": {
+      "tp": 307,
+      "fp": 37,
+      "fn": 61
+    },
+    "D40": {
+      "tp": 425,
+      "fp": 90,
+      "fn": 228
+    }
+  },
+  "latency_ms_median": 177.6351850003266,
+  "latency_ms_p95": 225.08669754947726,
+  "images_per_second": 5.372596252226416,
+  "cpu_model": "INTEL(R) XEON(R) PLATINUM 8559C",
+  "failure_images": [
+    "rdd_India_India_001038",
+    "rdd_India_India_000470",
+    "rdd_India_India_001004",
+    "rdd_India_India_001852",
+    "rdd_India_India_002020",
+    "rdd_India_India_000439",
+    "rdd_India_India_001051",
+    "rdd_India_India_001381"
+  ]
+}

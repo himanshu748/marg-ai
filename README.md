@@ -77,7 +77,46 @@ definition. The worker uses the MockLLM by default; set
 /home/ubuntu/venv/bin/ruff check .
 /home/ubuntu/venv/bin/python -m pytest -q
 /home/ubuntu/venv/bin/python eval/eval_agent.py --llm mock
+/home/ubuntu/venv/bin/python eval/eval_detector.py \
+  --images /home/ubuntu/assets/rdd2022_india/eval_slice/images \
+  --labels /home/ubuntu/assets/rdd2022_india/eval_slice/labels \
+  --out eval/results/detector_india.json
+/home/ubuntu/venv/bin/python eval/eval_dedupe.py
 ```
+
+### Detector evaluation
+
+The OpenCV DNN detector was evaluated on a 600-image labelled India slice from
+RDD2022. AP uses all-point interpolation over confidence-ranked detections at
+IoU 0.50; production precision and recall use confidence threshold 0.25.
+
+| Class | AP@0.5 | TP | FP | FN |
+| --- | ---: | ---: | ---: | ---: |
+| D00 | 0.6819 | 156 | 44 | 91 |
+| D10 | 0.7033 | 4 | 2 | 7 |
+| D20 | 0.8593 | 307 | 37 | 61 |
+| D40 | 0.7116 | 425 | 90 | 228 |
+| **mAP@0.5** | **0.7390** | | | |
+
+At the production threshold, precision was **0.8376** and recall was
+**0.6974**. Median inference latency was **177.64 ms**, p95 latency
+**225.09 ms**, and throughput **5.37 images/s** on an
+**INTEL(R) XEON(R) PLATINUM 8559C** CPU. Annotated failures are in
+`docs/failures/`.
+
+### Deduplication evaluation
+
+Manual visible-pothole counts were made from the evidence frames and keyframes.
+The resulting detection-to-instance compression and unique-instance metrics are:
+
+| Survey | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| pothole_cars | 21 | 4 | 5.25:1 | 1 | 0.250 | 1.000 |
+| pothole_kumasi | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
+
+Per-instance observation counts are `[2, 1, 4, 14]` for `pothole_cars` and
+`[62, 32, 2]` for `pothole_kumasi`. Full output is in
+`eval/results/dedupe.md`.
 
 ## Licenses and attribution
 
