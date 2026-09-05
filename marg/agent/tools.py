@@ -4,12 +4,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 import cv2
-import numpy as np
 
 from marg.store.local import LocalStore
 from marg.vision.detector import DNNDetector
-from marg.vision.models import Detection, SurveyInstance, SurveyResult
-
+from marg.vision.models import SurveyInstance, SurveyResult
 
 TOOL_SPECS: list[dict[str, object]] = [
     {
@@ -109,10 +107,10 @@ class ToolSet:
         x, y, width, height = instance.bbox
         expand_width = width * 1.5
         expand_height = height * 1.5
-        x0 = max(0, int(round(x + width / 2.0 - expand_width / 2.0)))
-        y0 = max(0, int(round(y + height / 2.0 - expand_height / 2.0)))
-        x1 = min(image.shape[1], int(round(x + width / 2.0 + expand_width / 2.0)))
-        y1 = min(image.shape[0], int(round(y + height / 2.0 + expand_height / 2.0)))
+        x0 = max(0, round(x + width / 2.0 - expand_width / 2.0))
+        y0 = max(0, round(y + height / 2.0 - expand_height / 2.0))
+        x1 = min(image.shape[1], round(x + width / 2.0 + expand_width / 2.0))
+        y1 = min(image.shape[0], round(y + height / 2.0 + expand_height / 2.0))
         crop = image[y0:y1, x0:x1]
         if crop.size == 0:
             return {"detections": [], "confirmed": False, "error": "empty crop"}
@@ -215,8 +213,8 @@ class ToolSet:
             path = self.context.keyframe_dir / f"kf_{keyframe_id:05d}.jpg"
             if path.exists():
                 return path
-        if len(self.context.result.keyframe_paths) == 1:
-            path = Path(self.context.result.keyframe_paths[0])
+        for candidate in self.context.result.keyframe_paths:
+            path = Path(candidate)
             if path.exists():
                 return path
         return None

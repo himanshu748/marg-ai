@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MargAI Survey Dashboard</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    :root { color-scheme: dark; --bg:#10151b; --panel:#19222c; --line:#30404d; --muted:#9fb0bd; --accent:#63d7c9; }
+    * { box-sizing:border-box; } body { margin:0; font:14px system-ui,sans-serif; background:var(--bg); color:#edf5f7; }
+    header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:center; }
+    header h1 { font-size:20px; margin:0; letter-spacing:.03em; } select,button { border:1px solid var(--line); border-radius:6px; background:#111920; color:inherit; padding:8px 10px; }
+    button { cursor:pointer; } button:hover { border-color:var(--accent); } .warning { color:#ffd166; border:1px solid #806b2f; padding:4px 8px; border-radius:999px; font-size:12px; }
+    .stats { display:flex; gap:10px; flex-wrap:wrap; padding:12px 20px; border-bottom:1px solid var(--line); } .stat { background:var(--panel); padding:8px 12px; border-radius:6px; min-width:100px; } .stat b { display:block; font-size:18px; } .stat span { color:var(--muted); font-size:11px; }
+    main { display:grid; grid-template-columns:45% 55%; min-height:calc(100vh - 120px); } #map { min-height:700px; } .side { border-left:1px solid var(--line); padding:15px; overflow:auto; } .tabs { display:flex; gap:6px; margin-bottom:12px; } .tab.active { background:var(--accent); color:#071513; }
+    .tabpane { display:none; } .tabpane.active { display:block; } table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px 5px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:500; }
+    .trace { border-left:2px solid var(--accent); padding-left:12px; margin:10px 0; } .trace small,.muted { color:var(--muted); } pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; color:#c4d3da; }
+    .order { background:var(--panel); padding:12px; margin:10px 0; border-radius:8px; border-left:4px solid #e05252; } .order.low { border-left-color:#53c878; } .order.pending { box-shadow:0 0 0 1px #ffd166 inset; } .badge { color:#ffd166; font-size:12px; }
+    .crop { width:90px; max-height:70px; object-fit:cover; border-radius:4px; } .empty { color:var(--muted); padding:20px 0; }
+  </style>
+</head>
+<body>
+  <header><h1>MargAI / road survey</h1><select id="survey"></select><button id="run">Run agent (mock)</button><span id="geo"></span></header>
+  <section class="stats" id="stats"></section>
+  <main><div id="map"></div><section class="side">
+    <nav class="tabs"><button class="tab active" data-tab="instances">Instances</button><button class="tab" data-tab="trace">Agent trace</button><button class="tab" data-tab="orders">Work orders</button></nav>
+    <div id="instances" class="tabpane active"></div><div id="trace" class="tabpane"></div><div id="orders" class="tabpane"></div>
+  </section></main>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    const $ = id => document.getElementById(id); let current = null; let currentId = null; let map = L.map('map').setView([20,78],5); let markers = L.layerGroup().addTo(map);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+    async function get(path, options) { const response = await fetch(path, options); if (!response.ok) throw new Error(await response.text()); return response.json(); }
+    function stat(label,value) { return `<div class="stat"><b>${esc(value)}</b><span>${label}</span></div>`; }
+    function severityColor(s) { return s >= 4 ? '#e05252' : s === 3 ? '#ffd166' : '#53c878'; }
+    async function loadSurveys() { const surveys = await get('/api/surveys'); $('survey').innerHTML = surveys.map(s => `<option value="${esc(s.id)}">${esc(s.id)}</option>`).join(''); if (surveys.length) await loadSurvey(surveys[0].id); }
+    async function loadSurvey(id) {
+      currentId = id; current = await get(`/api/surveys/${encodeURIComponent(id)}`); $('survey').value=id; markers.clearLayers();
+      const points=[]; current.instances.forEach(inst => { points.push([inst.lat,inst.lon]); const marker=L.circleMarker([inst.lat,inst.lon],{radius:8,fillColor:severityColor(inst.severity),color:'#fff',weight:1,fillOpacity:.9}); const crop=current.crop_paths[inst.id] || ''; marker.bindPopup(`<b>${esc(inst.class_name)}</b><br>confidence ${Number(inst.fused_conf).toFixed(2)}<br>severity ${inst.severity}<br>area ${Number(inst.area_m2).toFixed(2)} m²${crop ? `<br><img class="crop" src="/api/surveys/${encodeURIComponent(id)}/crops/${encodeURIComponent(crop.split('/').pop())}">` : ''}`); markers.addLayer(marker); }); if(points.length) map.fitBounds(points,{padding:[25,25]});
+      $('stats').innerHTML = stat('frames',current.frames)+stat('keyframes',current.keyframes)+stat('detections',Object.values(current.detections).reduce((a,b)=>a+b,0))+stat('instances',current.instances.length)+stat('runtime',`${Number(current.metrics.runtime_s||0).toFixed(1)}s`)+(current.geo_source==='synthetic'?'<span class="warning">synthetic GPS</span>':stat('geo',current.geo_source)); $('geo').innerHTML=current.geo_source==='synthetic'?'<span class="warning">synthetic GPS</span>':'';
+      renderInstances(id); renderTrace(id); renderOrders(id);
+    }
+    function renderInstances(id) { $('instances').innerHTML=`<table><thead><tr><th>Class</th><th>Conf.</th><th>Severity</th><th>Area</th><th>GPS</th></tr></thead><tbody>${current.instances.map(i=>`<tr><td>${esc(i.class_name)}</td><td>${Number(i.fused_conf).toFixed(2)}</td><td>${i.severity}</td><td>${Number(i.area_m2).toFixed(2)} m²</td><td>${Number(i.lat).toFixed(5)}, ${Number(i.lon).toFixed(5)}</td></tr>`).join('')}</tbody></table>`; }
+    async function renderTrace(id) { try { const trace=await get(`/api/surveys/${encodeURIComponent(id)}/trace`); $('trace').innerHTML=trace.length?trace.map(e=>`<div class="trace"><b>${esc(e.tool)}</b> <small>step ${e.step} · ${Number(e.latency_ms).toFixed(1)} ms</small><pre>args: ${esc(JSON.stringify(e.input))}</pre><pre>out: ${esc(JSON.stringify(e.output))}</pre></div>`).join(''):'<div class="empty">No agent trace yet.</div>'; } catch { $('trace').innerHTML='<div class="empty">No agent trace yet.</div>'; } }
+    async function renderOrders(id) { try { const agent=await get(`/api/surveys/${encodeURIComponent(id)}/agent`); const orders=agent.work_orders||[]; $('orders').innerHTML=orders.length?orders.map(o=>`<article class="order ${esc(o.priority)} ${o.status==='pending_approval'?'pending':''}"><b>${esc(o.priority)} priority</b> · ${esc(o.status)} ${o.status==='pending_approval'?'<span class="badge">awaiting approval</span>':''}<p>${esc(o.summary)}</p>${o.status==='pending_approval'?`<button onclick="decide('${esc(id)}','${esc(o.work_order_id)}','approve')">Approve</button> <button onclick="decide('${esc(id)}','${esc(o.work_order_id)}','reject')">Reject</button>`:''}</article>`).join(''):'<div class="empty">No work orders.</div>'; } catch { $('orders').innerHTML='<div class="empty">No agent result yet.</div>'; } }
+    async function decide(id,wo,decision) { await get(`/api/surveys/${encodeURIComponent(id)}/work_orders/${encodeURIComponent(wo)}/decision`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decision,note:'Dashboard decision'})}); await renderOrders(id); }
+    $('survey').onchange=e=>loadSurvey(e.target.value); $('run').onclick=async()=>{ await get(`/api/surveys/${encodeURIComponent(currentId)}/run_agent?llm=mock`,{method:'POST'}); const started=Date.now(); const poll=setInterval(async()=>{ try { await get(`/api/surveys/${encodeURIComponent(currentId)}/agent`); clearInterval(poll); await renderTrace(currentId); await renderOrders(currentId); } catch {} if(Date.now()-started>60000) clearInterval(poll); },2000); };
+    document.querySelectorAll('.tab').forEach(button=>button.onclick=()=>{document.querySelectorAll('.tab,.tabpane').forEach(el=>el.classList.remove('active'));button.classList.add('active');$(button.dataset.tab).classList.add('active');});
+    loadSurveys().catch(error=>{$('stats').textContent=error;});
+  </script>
+</body>
+</html>

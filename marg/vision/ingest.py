@@ -1,6 +1,6 @@
+import time
 from collections.abc import Iterator
 from pathlib import Path
-import time
 
 import cv2
 

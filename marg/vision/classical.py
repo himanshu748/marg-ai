@@ -5,7 +5,7 @@ from .models import Detection
 
 
 def pothole_support(frame: np.ndarray, bbox: tuple[float, float, float, float]) -> float:
-    x, y, width, height = [int(round(value)) for value in bbox]
+    x, y, width, height = [round(value) for value in bbox]
     x0, y0 = max(0, x), max(0, y)
     x1 = min(frame.shape[1], max(x0 + 1, x + width))
     y1 = min(frame.shape[0], max(y0 + 1, y + height))

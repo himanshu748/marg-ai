@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -9,8 +10,8 @@ from marg.vision.config import VisionConfig
 from marg.vision.detector import DNNDetector
 from marg.vision.models import SurveyResult
 
-from .llm import BedrockLLM, LLM, LLMResponse, MockLLM, ToolCall, default_llm
-from .prompts import FINALIZE_INSTRUCTION, SYSTEM_PROMPT
+from .llm import LLM, BedrockUnavailable, LLMResponse, MockLLM, ToolCall, default_llm
+from .prompts import FINALIZE_INSTRUCTION
 from .tools import TOOL_SPECS, ToolContext, ToolSet
 from .trace import Trace
 
@@ -52,14 +53,13 @@ def run_agent(
             "role": "user",
             "content": [
                 {
-                    "text": f"{SYSTEM_PROMPT}\n\nSURVEY RESULT:\n{result.model_dump_json()}"
+                    "text": f"SURVEY RESULT:\n{result.model_dump_json()}"
                 }
             ],
         }
     ]
     tool_call_count = 0
     forced_finalize = False
-    response = LLMResponse()
     for _ in range(max_tool_calls + 10):
         if tool_call_count >= max_tool_calls - 1 and not registry.finalized:
             response = _finalize_response(llm, messages, trace)
@@ -80,36 +80,16 @@ def run_agent(
         if not response.tool_calls:
             messages.append({"role": "assistant", "content": [{"text": response.text}]})
             continue
-        call = response.tool_calls[0]
-        output = _execute_call(registry, call, trace, llm)
-        tool_call_count += 1
-        messages.append(
-            {
-                "role": "assistant",
-                "content": [
-                    {
-                        "toolUse": {
-                            "toolUseId": call.call_id or f"call-{tool_call_count}",
-                            "name": call.name,
-                            "input": call.arguments,
-                        }
-                    }
-                ],
-            }
-        )
-        messages.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "toolResult": {
-                            "toolUseId": call.call_id or f"call-{tool_call_count}",
-                            "content": [{"json": output}],
-                        }
-                    }
-                ],
-            }
-        )
+        remaining = max_tool_calls - 1 - tool_call_count
+        calls = response.tool_calls[:remaining]
+        outputs: list[tuple[ToolCall, dict[str, object]]] = []
+        for call in calls:
+            output = _execute_call(registry, call, trace, llm)
+            tool_call_count += 1
+            outputs.append((call, output))
+            if registry.finalized:
+                break
+        _append_tool_exchange(messages, outputs, tool_call_count)
         if registry.finalized:
             break
     if not registry.finalized:
@@ -141,6 +121,36 @@ def _execute_call(
     return output
 
 
+def _append_tool_exchange(
+    messages: list[dict[str, object]],
+    outputs: list[tuple[ToolCall, dict[str, object]]],
+    tool_call_count: int,
+) -> None:
+    tool_uses: list[dict[str, object]] = []
+    tool_results: list[dict[str, object]] = []
+    for offset, (call, output) in enumerate(outputs):
+        call_id = call.call_id or f"call-{tool_call_count - len(outputs) + offset + 1}"
+        tool_uses.append(
+            {
+                "toolUse": {
+                    "toolUseId": call_id,
+                    "name": call.name,
+                    "input": call.arguments,
+                }
+            }
+        )
+        tool_results.append(
+            {
+                "toolResult": {
+                    "toolUseId": call_id,
+                    "content": [{"json": output}],
+                }
+            }
+        )
+    messages.append({"role": "assistant", "content": tool_uses})
+    messages.append({"role": "user", "content": tool_results})
+
+
 def _finalize_response(llm: LLM, messages: list[dict[str, object]], trace: Trace) -> LLMResponse:
     started = time.perf_counter()
     final_messages = messages + [{"role": "user", "content": [{"text": FINALIZE_INSTRUCTION}]}]
@@ -159,19 +169,23 @@ def main() -> None:
     args = parser.parse_args()
     output_dir = Path(args.out)
     output_dir.mkdir(parents=True, exist_ok=True)
-    result = SurveyResult.model_validate_json(Path(args.result).read_text(encoding="utf-8"))
-    config = VisionConfig()
-    model_path = config.model_file(Path(__file__).resolve().parents[2])
-    detector = DNNDetector(model_path, config)
-    store = LocalStore(output_dir / "store")
-    context = ToolContext(
-        result=result,
-        store=store,
-        detector=detector,
-        keyframe_dir=Path(args.result).parent / "keyframes",
-    )
-    llm = default_llm(args.llm)
-    run = run_agent(result, llm, context)
+    try:
+        result = SurveyResult.model_validate_json(Path(args.result).read_text(encoding="utf-8"))
+        config = VisionConfig()
+        model_path = config.model_file(Path(__file__).resolve().parents[2])
+        detector = DNNDetector(model_path, config)
+        store = LocalStore(output_dir / "store")
+        context = ToolContext(
+            result=result,
+            store=store,
+            detector=detector,
+            keyframe_dir=Path(args.result).parent / "keyframes",
+        )
+        llm = default_llm(args.llm)
+        run = run_agent(result, llm, context)
+    except BedrockUnavailable as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc
     run.trace.write_jsonl(output_dir / "trace.jsonl")
     (output_dir / "agent_result.json").write_text(
         json.dumps(run.to_dict(), indent=2), encoding="utf-8"

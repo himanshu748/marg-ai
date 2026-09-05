@@ -1,4 +1,3 @@
-from marg.vision.config import VisionConfig
 from marg.vision.severity import score
 
 

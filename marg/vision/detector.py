@@ -69,8 +69,8 @@ class DNNDetector:
     def _letterbox(self, frame: np.ndarray) -> tuple[np.ndarray, float, float, float]:
         size = self.config.dnn_input_size
         scale = min(size / frame.shape[1], size / frame.shape[0])
-        width = max(1, int(round(frame.shape[1] * scale)))
-        height = max(1, int(round(frame.shape[0] * scale)))
+        width = max(1, round(frame.shape[1] * scale))
+        height = max(1, round(frame.shape[0] * scale))
         resized = cv2.resize(frame, (width, height), interpolation=cv2.INTER_LINEAR)
         canvas = np.full((size, size, 3), 114, dtype=np.uint8)
         pad_x = (size - width) / 2.0

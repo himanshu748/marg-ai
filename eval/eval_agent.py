@@ -3,14 +3,13 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from marg.agent.loop import AgentRun, run_agent
 from marg.agent.llm import MockLLM
+from marg.agent.loop import AgentRun, run_agent
 from marg.agent.tools import ToolContext
 from marg.store.local import LocalStore
 from marg.vision.config import VisionConfig
 from marg.vision.detector import DNNDetector
 from marg.vision.models import Segment, SurveyInstance, SurveyResult
-
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURE = ROOT / "tests" / "fixtures" / "pothole_bengaluru.jpg"
@@ -25,15 +24,15 @@ class Scenario:
 
 
 def build_scenario(name: str) -> Scenario:
-    base = dict(
-        video="synthetic",
-        geo_source="synthetic",
-        frames=1,
-        processed_frames=1,
-        keyframes=1,
-        detections={"D00": 0, "D10": 0, "D20": 0, "D40": 0},
-        keyframe_paths=[str(FIXTURE)],
-    )
+    base = {
+        "video": "synthetic",
+        "geo_source": "synthetic",
+        "frames": 1,
+        "processed_frames": 1,
+        "keyframes": 1,
+        "detections": {"D00": 0, "D10": 0, "D20": 0, "D40": 0},
+        "keyframe_paths": [str(FIXTURE)],
+    }
     if name == "S1":
         instances = [_instance(1, "D40", 0.40, 4, [0.40], ["D40"])]
         expected = "inspect_before_work_order"

@@ -2,10 +2,15 @@ import os
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from botocore.exceptions import BotoCoreError, ClientError
+
 from marg.vision.models import SurveyResult
 
-from .prompts import FINALIZE_INSTRUCTION
-from .tools import TOOL_SPECS
+from .prompts import FINALIZE_INSTRUCTION, SYSTEM_PROMPT
+
+
+class BedrockUnavailable(RuntimeError):
+    """Raised when Bedrock cannot service a Converse request."""
 
 
 @dataclass(slots=True)
@@ -31,11 +36,13 @@ class LLM(Protocol):
 class BedrockLLM:
     def __init__(
         self,
-        model_id: str = "us.anthropic.claude-sonnet-4-20250514-v1:0",
-        region: str = "us-east-1",
+        model_id: str | None = None,
+        region: str | None = None,
     ) -> None:
-        self.model_id = model_id
-        self.region = region
+        self.model_id = model_id or os.environ.get(
+            "MARG_BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0"
+        )
+        self.region = region or os.environ.get("AWS_REGION", "us-east-1")
 
     def converse(
         self, messages: list[dict[str, object]], tools: list[dict[str, object]]
@@ -43,11 +50,21 @@ class BedrockLLM:
         import boto3
 
         client = boto3.client("bedrock-runtime", region_name=self.region)
-        response = client.converse(
-            modelId=self.model_id,
-            messages=messages,
-            toolConfig={"tools": tools},
-        )
+        try:
+            response = client.converse(
+                modelId=self.model_id,
+                system=[{"text": SYSTEM_PROMPT}],
+                messages=messages,
+                toolConfig={"tools": tools},
+                inferenceConfig={"maxTokens": 1024, "temperature": 0},
+            )
+        except (ClientError, BotoCoreError) as exc:
+            detail = str(exc)
+            if isinstance(exc, ClientError):
+                detail = str(exc.response.get("Error", {}).get("Message", detail))
+            raise BedrockUnavailable(
+                f"Bedrock Converse unavailable for {self.model_id} in {self.region}: {detail}"
+            ) from exc
         output = response.get("output", {})
         if not isinstance(output, dict):
             return LLMResponse()
@@ -107,7 +124,7 @@ class MockLLM:
             instance_id = int(call.arguments["instance_id"])
             self.compared.add(instance_id)
             classes = output.get("classes_seen", [])
-            if isinstance(classes, list) and len(set(str(item) for item in classes)) > 1:
+            if isinstance(classes, list) and len({str(item) for item in classes}) > 1:
                 self.disagreements.add(instance_id)
         elif call.name == "request_resurvey":
             self.resurveyed.add(int(call.arguments["segment_id"]))
@@ -242,6 +259,6 @@ class MockLLM:
 
 
 def default_llm(kind: str) -> LLM:
-    if kind == "mock" or os.environ.get("MARG_LLM") == "mock" or not os.environ.get("AWS_ACCESS_KEY_ID"):
+    if kind == "mock" or os.environ.get("MARG_LLM") == "mock":
         return MockLLM()
-    return BedrockLLM(model_id=os.environ.get("MARG_BEDROCK_MODEL", "us.anthropic.claude-sonnet-4-20250514-v1:0"))
+    return BedrockLLM()

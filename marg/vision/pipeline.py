@@ -1,5 +1,4 @@
 import argparse
-import shutil
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -111,7 +110,6 @@ def run(
             if len(example_keyframes) < 6:
                 example_keyframes.append((keyframe.keyframe_id, annotated, rendered))
         previous_gray = current_gray
-        previous_timestamp = packet.timestamp_s
     instances: list[SurveyInstance] = []
     for track in tracker.finalize():
         class_name, confidence, frame_confs = tracker.summarize(track)
@@ -174,7 +172,7 @@ def _flow_gray(frame: np.ndarray, width: int) -> np.ndarray:
 
 
 def _draw_detection(frame: np.ndarray, detection: Detection, instance_id: int) -> None:
-    x, y, width, height = [int(round(value)) for value in detection.bbox]
+    x, y, width, height = [round(value) for value in detection.bbox]
     cv2.rectangle(frame, (x, y), (x + width, y + height), (0, 220, 0), 2)
     label = f"{instance_id}:{detection.class_name} {detection.fused_conf:.2f}"
     cv2.putText(frame, label, (x, max(16, y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 0), 1)
@@ -183,7 +181,7 @@ def _draw_detection(frame: np.ndarray, detection: Detection, instance_id: int) -
 def _save_crop(frame: np.ndarray | None, bbox: tuple[float, float, float, float], path: Path) -> None:
     if frame is None:
         return
-    x, y, width, height = [int(round(value)) for value in bbox]
+    x, y, width, height = [round(value) for value in bbox]
     crop = frame[max(0, y) : min(frame.shape[0], y + height), max(0, x) : min(frame.shape[1], x + width)]
     if crop.size:
         cv2.imwrite(str(path), crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
