@@ -2,9 +2,15 @@ from pathlib import Path
 
 import cv2
 import numpy as np
+import pytest
 
 from marg.vision.config import VisionConfig
 from marg.vision.detector import DNNDetector
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
+    reason="ONNX detector model is not present in this checkout",
+)
 
 
 def test_detector_loads_and_runs() -> None:

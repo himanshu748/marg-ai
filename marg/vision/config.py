@@ -17,6 +17,8 @@ class VisionConfig(BaseModel):
     classes: list[str] = Field(default_factory=lambda: ["D00", "D10", "D20", "D40"])
     tracker_iou: float = 0.3
     tracker_max_unseen_keyframes: int = 6
+    min_observations: int = 2
+    redact: bool = True
     optical_flow_width: int = 480
     timestamp_offset_s: float = 0.0
     synthetic_start_lat: float = 28.6139

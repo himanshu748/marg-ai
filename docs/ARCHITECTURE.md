@@ -18,9 +18,9 @@ modes:
 
 The worker stages are quality and blur filtering, ORB keyframe selection with
 RANSAC homography checks, OpenCV DNN ONNX inference, optical-flow tracking,
-severity and GPS enrichment, and evidence generation. The agent is deliberately
-approval-gated: it may draft a work order, but the dashboard's human decision
-is the final action.
+severity and GPS enrichment, write-time YuNet face/plate redaction, and
+evidence generation. The agent is deliberately approval-gated: it may draft a
+work order, but the dashboard's human decision is the final action.
 
 The AWS stack is defined in `infra/cloudformation.yaml` and built by
 `infra/deploy.sh`. AWS deployment has not yet been executed in this account;

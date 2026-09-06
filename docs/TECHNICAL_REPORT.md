@@ -91,6 +91,25 @@ progress, and a failed survey retains an error status rather than disappearing
 from the operator's list. This is useful for a field workflow where a worker
 may be offline or a route may need to be retried.
 
+### Privacy redaction
+
+Write-time privacy protection uses OpenCV Zoo face YuNet
+(`face_detection_yunet_2023mar.onnx`, MIT) and license-plate LPD-YuNet
+(`license_plate_detection_lpd_yunet_2023mar.onnx`, Apache-2.0). Face YuNet
+runs at the full frame size. Plate LPD-YuNet uses the full frame and six
+overlapping tiles covering the upper and lower 60% of the image. A 960-pixel
+frame squeezed directly to 320x240 scored only 0.54 on a visible plate; a
+lower-left tile scored 0.99. Candidate quadrilaterals are mapped back to frame
+coordinates and merged with one global NMS pass.
+
+Redaction is pixelation with a protected damage bbox, so the privacy mask
+cannot alter the pixels used for the road-damage instance. Original
+`evidence_raw/` frames remain available only to the agent's re-inspection
+tools and are not API-served. In the latest local demo runs, evidence
+redaction averaged **332.57 ms/frame** for `pothole_cars` and
+**345.81 ms/frame** for `pothole_kumasi`; total redactions were **21** and
+**19**, respectively.
+
 ## OpenCV 5 implementation
 
 MargAI uses the OpenCV 5 Python wheel (`cv2.__version__` reports 5.0.0) for
@@ -261,10 +280,19 @@ interpolated AP over confidence-ranked detections.
 
 ### Deduplication evaluation
 
+The gating configuration is `min_observations=2`: a closed track with fewer
+observations is dropped only when its best fused confidence is below 0.55.
+Recall remained 1.000 on both clips.
+
 | Survey | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | pothole_cars | 21 | 4 | 5.25:1 | 1 | 0.250 | 1.000 |
 | pothole_kumasi | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
+
+| Survey | After gating instances | Compression | Unique precision | Unique recall |
+| --- | ---: | ---: | ---: | ---: |
+| pothole_cars | 3 | 7.00:1 | 0.333 | 1.000 |
+| pothole_kumasi | 3 | 32.00:1 | 0.667 | 1.000 |
 
 | Survey | Per-instance observation counts |
 | --- | --- |
@@ -304,22 +332,23 @@ restrictive treatment until clarified. The two pothole videos are CC BY-SA
 False positives remain possible in shadows, glare, road repairs, vehicles,
 and water. The agent therefore cannot autonomously approve a work order.
 MargAI does not store faces or license plates as structured fields and does
-not intentionally identify people. It currently does **not blur faces or
-plates in the saved evidence images**; privacy-preserving redaction is future
-work before operational deployment.
+not intentionally identify people. Redaction is best-effort: small or distant
+plates and non-frontal faces can be missed. The human approval gate remains
+required, and privacy performance should be rechecked on each camera setup.
 
 The following claims are **verified locally**: OpenCV DNN inference, pipeline
 tracking and evidence generation, MockLLM policy scenarios, auditor behavior,
 FastAPI dashboard/API tests, detector evaluation, deduplication measurement,
-and the rendered architecture image. The following remain **pending on AWS**:
+privacy detector and redaction tests, the 22-test pytest suite, Ruff, and the
+rendered architecture image. The following remain **pending on AWS**:
 live CloudFormation deployment, ALB health checks, S3/SQS worker execution,
 Bedrock account access, and upload-to-done latency.
 
 ## Future work
 
-Next steps are privacy redaction, calibrated metric-scale severity, real GPS
-and map-matching validation, a larger official validation split, temporal
-hard-negative mining for shadows and vehicles, and a live AWS benchmark
-comparing ARM64 Graviton with x86_64. A production rollout should also add
-role-based dashboard access, immutable evidence retention, route-level
-quality reports, and an explicit municipal work-order integration.
+Next steps are calibrated metric-scale severity, real GPS and map-matching
+validation, a larger official validation split, temporal hard-negative mining
+for shadows and vehicles, and a live AWS benchmark comparing ARM64 Graviton
+with x86_64. A production rollout should also add role-based dashboard
+access, immutable evidence retention, route-level quality reports, and an
+explicit municipal work-order integration.

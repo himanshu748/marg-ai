@@ -33,7 +33,8 @@ approval actions.
 The vision path uses OpenCV 5 Python APIs: `VideoCapture`, Laplacian quality
 scoring, ORB and RANSAC homography keyframes, OpenCV DNN ONNX YOLOv8
 inference, Farneback optical flow, perspective transforms for severity, and
-classical LAB/texture cues. Pydantic models define a durable survey contract.
+classical LAB/texture cues. OpenCV Zoo YuNet and tiled LPD-YuNet provide
+best-effort face and plate redaction at write time. Pydantic models define a durable survey contract.
 The agent has explicit tools, a JSONL trace, a deterministic MockLLM for
 reproducible tests, a Bedrock Converse wrapper, and a pure auditor. The local
 dashboard serves JSON survey directories. The AWS target uses S3, SQS,
@@ -50,8 +51,9 @@ Tight crops lost road context during agent inspection, which led to a
 context-window rerun and IoU-aware confirmation rule. The official India
 archive was inaccessible from the evaluation environment, so a derived
 Hugging Face slice was used and its licensing caveat was recorded explicitly.
-Finally, AWS service activation blocked live deployment; the implementation
-and deployment templates remain reproducible without claiming a live result.
+AWS service activation blocked the competition deployment, so the public
+read-only dashboard is currently hosted as an interim Zerops demo:
+https://margai-2ab8-8080.prg1.zerops.app/
 
 ## Accomplishments
 
@@ -73,11 +75,11 @@ haze, glare, vehicles, and small distant defects.
 
 ## What's next
 
-Before operational use, MargAI needs privacy redaction for faces and plates,
-calibrated physical severity, real GPS and map-matching validation, official
-dataset-license clarification, broader hard-negative evaluation, and a live
-ARM64 Graviton benchmark. The AWS deployment will be activated and verified
-when the account services are enabled.
+Before operational use, MargAI needs stronger privacy recall on small plates
+and non-frontal faces, calibrated physical severity, real GPS and map-matching
+validation, official dataset-license clarification, broader hard-negative
+evaluation, and a live ARM64 Graviton benchmark. The AWS deployment will be
+activated and verified when the account services are enabled.
 
 ## Built with
 
@@ -110,7 +112,7 @@ when the account services are enabled.
 - [x] Architecture diagram: `docs/ARCHITECTURE.md`,
   `docs/architecture.svg`, and rendered `docs/architecture.png`
 - [x] Local build, deploy, and test instructions in `README.md`
-- [ ] Live endpoint: pending AWS account activation and deployment
+- [x] Interim live endpoint (public, read-only): https://margai-2ab8-8080.prg1.zerops.app/
 - [ ] Demonstration video, maximum five minutes: record using
   `docs/VIDEO_SCRIPT.md`
 - [x] Evaluation evidence: detector, deduplication, agent tables, and eight

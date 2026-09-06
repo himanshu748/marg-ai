@@ -106,7 +106,15 @@ class InstanceTracker:
         return updates
 
     def finalize(self) -> list[_Track]:
-        return list(self._closed.values()) + list(self._tracks.values())
+        tracks = list(self._closed.values()) + list(self._tracks.values())
+        return [
+            track
+            for track in tracks
+            if not (
+                len(track.observations) < self.config.min_observations
+                and track.fused_conf < 0.55
+            )
+        ]
 
     @staticmethod
     def _warp(bbox: tuple[float, float, float, float], flow: np.ndarray | None) -> tuple[float, float, float, float]:

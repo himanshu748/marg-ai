@@ -3,10 +3,16 @@ import shutil
 import time
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from marg.api.app import create_app
 from marg.vision.models import Segment, SurveyInstance, SurveyResult
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
+    reason="ONNX detector model is not present in this checkout",
+)
 
 
 def _write_fixture(root: Path) -> None:
@@ -63,6 +69,7 @@ def test_api_dashboard_endpoints(tmp_path: Path) -> None:
     assert client.get("/api/surveys/demo/keyframes/../result.json", follow_redirects=False).status_code in {400, 404}
     assert client.get("/api/surveys/demo/keyframes/kf_00000.jpg").status_code == 200
     assert client.get("/api/surveys/demo/evidence/inst_0000.jpg").status_code == 200
+    assert client.get("/api/surveys/demo/evidence_raw/x.jpg").status_code == 404
 
     started = client.post("/api/surveys/demo/run_agent?llm=mock")
     assert started.status_code == 200

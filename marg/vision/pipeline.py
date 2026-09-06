@@ -13,6 +13,7 @@ from .geo import GeoTrack, cluster_instances
 from .ingest import VideoSource
 from .keyframes import KeyframeSelector
 from .models import Detection, SurveyInstance, SurveyResult, SurveySummary
+from .privacy import detect_sensitive_regions, redact
 from .quality import assess
 from .severity import bbox_area_m2, score
 from .tracker import InstanceTracker
@@ -32,6 +33,12 @@ def run(
     (output_dir / "keyframes").mkdir(exist_ok=True)
     (output_dir / "crops").mkdir(exist_ok=True)
     (output_dir / "evidence").mkdir(exist_ok=True)
+    (output_dir / "evidence_raw").mkdir(exist_ok=True)
+    (output_dir / "agent_crops").mkdir(exist_ok=True)
+    for media_dir in ("evidence", "evidence_raw", "crops", "keyframes", "agent_crops"):
+        for media_path in (output_dir / media_dir).iterdir():
+            if media_path.is_file() or media_path.is_symlink():
+                media_path.unlink()
     model_path = config.model_file(Path(__file__).resolve().parents[2])
     detector = DNNDetector(model_path, config)
     selector = KeyframeSelector(config)
@@ -45,7 +52,16 @@ def run(
     previous_gray: np.ndarray | None = None
     best_frames: dict[int, np.ndarray] = {}
     evidence_paths: dict[int, str] = {}
-    stage_times = {"decode": 0.0, "quality": 0.0, "keyframes": 0.0, "detect": 0.0, "track": 0.0}
+    redactions = 0
+    stage_times = {
+        "decode": 0.0,
+        "quality": 0.0,
+        "keyframes": 0.0,
+        "detect": 0.0,
+        "track": 0.0,
+        "privacy_evidence": 0.0,
+    }
+    evidence_redaction_frames = 0
     keyframe_id_for_frame: int | None = None
     example_keyframes: list[tuple[int, np.ndarray, list[tuple[int, Detection]]]] = []
     source = VideoSource(video_path, config)
@@ -108,7 +124,20 @@ def run(
             if update.best_observation is not None:
                 best_frames[update.instance_id] = packet.frame.copy()
                 evidence_path = output_dir / "evidence" / f"inst_{update.instance_id:04d}.jpg"
-                cv2.imwrite(str(evidence_path), packet.frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                raw_path = output_dir / "evidence_raw" / evidence_path.name
+                cv2.imwrite(str(raw_path), packet.frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
+                evidence_frame = packet.frame
+                if config.redact:
+                    redact_started = time.perf_counter()
+                    evidence_frame, count = redact(
+                        packet.frame,
+                        detect_sensitive_regions(packet.frame),
+                        protect=[tuple(update.best_observation.bbox)],
+                    )
+                    stage_times["privacy_evidence"] += time.perf_counter() - redact_started
+                    evidence_redaction_frames += 1
+                    redactions += count
+                cv2.imwrite(str(evidence_path), evidence_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
                 evidence_paths[update.instance_id] = str(evidence_path.relative_to(output_dir))
         if keyframe is not None:
             annotated = keyframe.frame.copy()
@@ -119,6 +148,13 @@ def run(
                 _draw_detection(annotated, detection, instance_id)
                 rendered.append((instance_id, detection))
             path = output_dir / "keyframes" / f"kf_{keyframe.keyframe_id:05d}.jpg"
+            if config.redact:
+                annotated, count = redact(
+                    annotated,
+                    detect_sensitive_regions(annotated),
+                    protect=[tuple(detection.bbox) for detection in detections],
+                )
+                redactions += count
             cv2.imwrite(str(path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
             keyframe_paths.append(str(path.relative_to(output_dir)))
             if len(example_keyframes) < 6:
@@ -154,13 +190,28 @@ def run(
         )
         instances.append(instance)
         crop_path = output_dir / "crops" / f"inst_{track.instance_id:04d}.jpg"
-        _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
+        if config.redact:
+            redactions += _save_crop(
+                best_frames.get(track.instance_id),
+                best_bbox,
+                crop_path,
+                redact_output=True,
+            )
+        else:
+            _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
         if crop_path.exists():
             crop_paths.append(str(crop_path.relative_to(output_dir)))
     segments = cluster_instances(instances, config.geo_cluster_radius_m)
     metrics = {
         "runtime_s": time.perf_counter() - started,
         "fps_processed": processed_frames / max(0.001, time.perf_counter() - started),
+        "redactions": redactions,
+        "evidence_redaction_frames": float(evidence_redaction_frames),
+        "evidence_redaction_avg_ms": (
+            stage_times["privacy_evidence"] * 1000 / evidence_redaction_frames
+            if evidence_redaction_frames
+            else 0.0
+        ),
         **{f"stage_{name}_s": value for name, value in stage_times.items()},
     }
     result = SurveyResult(
@@ -178,6 +229,7 @@ def run(
         keyframe_paths=keyframe_paths,
         crop_paths=crop_paths,
         metrics=metrics,
+        redactions=redactions,
     )
     result.surveys = [
         SurveySummary(id=result.survey_id, video=str(video_path), geo_source=geo.source)
@@ -201,13 +253,23 @@ def _draw_detection(frame: np.ndarray, detection: Detection, instance_id: int) -
     cv2.putText(frame, label, (x, max(16, y - 5)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 220, 0), 1)
 
 
-def _save_crop(frame: np.ndarray | None, bbox: tuple[float, float, float, float], path: Path) -> None:
+def _save_crop(
+    frame: np.ndarray | None,
+    bbox: tuple[float, float, float, float],
+    path: Path,
+    redact_output: bool = False,
+) -> int:
     if frame is None:
-        return
+        return 0
     x, y, width, height = [round(value) for value in bbox]
     crop = frame[max(0, y) : min(frame.shape[0], y + height), max(0, x) : min(frame.shape[1], x + width)]
     if crop.size:
+        count = 0
+        if redact_output:
+            crop, count = redact(crop, detect_sensitive_regions(crop), protect=[(0.0, 0.0, float(crop.shape[1]), float(crop.shape[0]))])
         cv2.imwrite(str(path), crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
+        return count
+    return 0
 
 
 def _save_examples(

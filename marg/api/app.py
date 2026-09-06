@@ -32,6 +32,7 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=2, thread_name_prefix="marg-agent")
 def create_app(data_root: Path | str) -> FastAPI:
     bucket = os.environ.get("MARG_S3_BUCKET")
     root = Path(os.environ.get("MARG_S3_CACHE_DIR", str(data_root))).resolve()
+    read_only = os.environ.get("MARG_READ_ONLY") == "1"
     s3_store = (
         S3SurveyStore(
             bucket,
@@ -110,8 +111,9 @@ def create_app(data_root: Path | str) -> FastAPI:
         return candidate
 
     @app.get("/healthz")
-    def healthz() -> dict[str, str]:
-        return {"status": "ok"}
+    @app.get("/api/health")
+    def healthz() -> dict[str, object]:
+        return {"status": "ok", "read_only": read_only}
 
     @app.get("/api/surveys")
     def list_surveys() -> list[dict[str, object]]:
@@ -259,6 +261,11 @@ def create_app(data_root: Path | str) -> FastAPI:
         gpx: UploadFile | None = File(default=None),  # noqa: B008
         name: str = Form(default=""),
     ) -> dict[str, str]:
+        if read_only:
+            raise HTTPException(
+                status_code=403,
+                detail="Uploads are disabled on the public demo; run locally or on AWS",
+            )
         if s3_store is None:
             raise HTTPException(status_code=503, detail="S3 upload is not configured")
         survey_id = f"{_slug(name or video.filename or 'survey')}-{uuid4().hex[:10]}"
@@ -333,4 +340,4 @@ def _slug(value: str) -> str:
     return normalized.strip("-")[:40] or "survey"
 
 
-app = create_app(Path("outputs"))
+app = create_app(Path(os.environ.get("MARG_DATA_ROOT", "outputs")))
