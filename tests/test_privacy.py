@@ -65,6 +65,19 @@ def test_sensitive_fixture_detection_and_redaction(filename: str, minimum: int) 
         ) * 0.5
 
 
+def test_sensitive_dashcam_fixture_detects_red_van_plate() -> None:
+    image = cv2.imread(
+        str(Path(__file__).parent / "fixtures" / "dashcam_plates_CC_BY_SA_4.0.jpg")
+    )
+    regions = detect_sensitive_regions(image)
+    expected = (400, 400, 140, 90)
+    ex, ey, ew, eh = expected
+    assert any(
+        ex <= x + width / 2 <= ex + ew and ey <= y + height / 2 <= ey + eh
+        for x, y, width, height in regions
+    )
+
+
 @pytest.mark.skipif(
     not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
     reason="ONNX detector model is not present in this checkout",

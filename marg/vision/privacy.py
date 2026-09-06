@@ -49,36 +49,87 @@ class SensitiveRegionDetector:
         try:
             if self._plate is None:
                 self._plate = cv2.dnn.readNet(str(_PLATE_MODEL))
-            height, width = image.shape[:2]
-            native = cv2.resize(image, (320, 240), interpolation=cv2.INTER_AREA)
-            self._plate.setInput(cv2.dnn.blobFromImage(native))
-            loc, conf, iou = self._plate.forward(["loc", "conf", "iou"])
         except cv2.error:
             LOGGER.warning("Unable to run YuNet license-plate detector", exc_info=True)
             return []
-        scores = np.sqrt(np.clip(conf[:, 1], 0.0, 1.0) * np.clip(iou[:, 0], 0.0, 1.0))
-        boxes = np.hstack(
-            (
-                (self._priors[:, 0:2] + loc[:, 4:6] * 0.1 * self._priors[:, 2:4]) * (320, 240),
-                (self._priors[:, 0:2] + loc[:, 6:8] * 0.1 * self._priors[:, 2:4]) * (320, 240),
-                (self._priors[:, 0:2] + loc[:, 10:12] * 0.1 * self._priors[:, 2:4]) * (320, 240),
-                (self._priors[:, 0:2] + loc[:, 12:14] * 0.1 * self._priors[:, 2:4]) * (320, 240),
+        height, width = image.shape[:2]
+        windows = [(0, 0, width, height)]
+        lower_y = round(height * 0.4)
+        upper_y = round(height * 0.6)
+        for y0, y1 in ((lower_y, height), (0, upper_y)):
+            for x0 in (0, width // 4, width // 2):
+                windows.append((x0, y0, min(width, x0 + width // 2), y1))
+        candidates: list[tuple[list[float], float]] = []
+        for x0, y0, x1, y1 in windows:
+            if x1 <= x0 or y1 <= y0:
+                continue
+            native = cv2.resize(
+                image[y0:y1, x0:x1],
+                (320, 240),
+                interpolation=cv2.INTER_AREA,
             )
-        )
+            try:
+                self._plate.setInput(cv2.dnn.blobFromImage(native))
+                loc, conf, iou = self._plate.forward(["loc", "conf", "iou"])
+            except cv2.error:
+                LOGGER.warning("Unable to run YuNet license-plate detector", exc_info=True)
+                continue
+            scores = np.sqrt(
+                np.clip(conf[:, 1], 0.0, 1.0) * np.clip(iou[:, 0], 0.0, 1.0)
+            )
+            quads = np.hstack(
+                (
+                    (
+                        self._priors[:, 0:2]
+                        + loc[:, 4:6] * 0.1 * self._priors[:, 2:4]
+                    )
+                    * (320, 240),
+                    (
+                        self._priors[:, 0:2]
+                        + loc[:, 6:8] * 0.1 * self._priors[:, 2:4]
+                    )
+                    * (320, 240),
+                    (
+                        self._priors[:, 0:2]
+                        + loc[:, 10:12] * 0.1 * self._priors[:, 2:4]
+                    )
+                    * (320, 240),
+                    (
+                        self._priors[:, 0:2]
+                        + loc[:, 12:14] * 0.1 * self._priors[:, 2:4]
+                    )
+                    * (320, 240),
+                )
+            )
+            scale_x = (x1 - x0) / 320
+            scale_y = (y1 - y0) / 240
+            for quad, score in zip(quads, scores):
+                points = quad.reshape(4, 2)
+                points[:, 0] = points[:, 0] * scale_x + x0
+                points[:, 1] = points[:, 1] * scale_y + y0
+                left, top = points.min(axis=0)
+                right, bottom = points.max(axis=0)
+                candidates.append(
+                    (
+                        [float(left), float(top), float(right - left), float(bottom - top)],
+                        float(score),
+                    )
+                )
+        if not candidates:
+            return []
+        boxes = [box for box, _ in candidates]
+        scores = [score for _, score in candidates]
         keep = cv2.dnn.NMSBoxes(
-            boxes[:, :4].tolist(),
-            scores.tolist(),
+            boxes,
+            scores,
             score_threshold=0.9,
             nms_threshold=0.3,
             top_k=5000,
         )
-        output = []
-        for index in np.asarray(keep).reshape(-1):
-            points = boxes[int(index)].reshape(4, 2)
-            x0, y0 = points.min(axis=0)
-            x1, y1 = points.max(axis=0)
-            output.append(_clip_box((x0 * width / 320, y0 * height / 240, (x1 - x0) * width / 320, (y1 - y0) * height / 240), width, height))
-        return output
+        return [
+            _clip_box(boxes[int(index)], width, height)
+            for index in np.asarray(keep).reshape(-1)
+        ]
 
     @staticmethod
     def _make_priors() -> np.ndarray:

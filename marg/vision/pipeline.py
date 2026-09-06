@@ -34,6 +34,11 @@ def run(
     (output_dir / "crops").mkdir(exist_ok=True)
     (output_dir / "evidence").mkdir(exist_ok=True)
     (output_dir / "evidence_raw").mkdir(exist_ok=True)
+    (output_dir / "agent_crops").mkdir(exist_ok=True)
+    for media_dir in ("evidence", "evidence_raw", "crops", "keyframes", "agent_crops"):
+        for media_path in (output_dir / media_dir).iterdir():
+            if media_path.is_file() or media_path.is_symlink():
+                media_path.unlink()
     model_path = config.model_file(Path(__file__).resolve().parents[2])
     detector = DNNDetector(model_path, config)
     selector = KeyframeSelector(config)
@@ -48,7 +53,15 @@ def run(
     best_frames: dict[int, np.ndarray] = {}
     evidence_paths: dict[int, str] = {}
     redactions = 0
-    stage_times = {"decode": 0.0, "quality": 0.0, "keyframes": 0.0, "detect": 0.0, "track": 0.0}
+    stage_times = {
+        "decode": 0.0,
+        "quality": 0.0,
+        "keyframes": 0.0,
+        "detect": 0.0,
+        "track": 0.0,
+        "privacy_evidence": 0.0,
+    }
+    evidence_redaction_frames = 0
     keyframe_id_for_frame: int | None = None
     example_keyframes: list[tuple[int, np.ndarray, list[tuple[int, Detection]]]] = []
     source = VideoSource(video_path, config)
@@ -115,11 +128,14 @@ def run(
                 cv2.imwrite(str(raw_path), packet.frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
                 evidence_frame = packet.frame
                 if config.redact:
+                    redact_started = time.perf_counter()
                     evidence_frame, count = redact(
                         packet.frame,
                         detect_sensitive_regions(packet.frame),
                         protect=[tuple(update.best_observation.bbox)],
                     )
+                    stage_times["privacy_evidence"] += time.perf_counter() - redact_started
+                    evidence_redaction_frames += 1
                     redactions += count
                 cv2.imwrite(str(evidence_path), evidence_frame, [cv2.IMWRITE_JPEG_QUALITY, 90])
                 evidence_paths[update.instance_id] = str(evidence_path.relative_to(output_dir))
@@ -190,6 +206,12 @@ def run(
         "runtime_s": time.perf_counter() - started,
         "fps_processed": processed_frames / max(0.001, time.perf_counter() - started),
         "redactions": redactions,
+        "evidence_redaction_frames": float(evidence_redaction_frames),
+        "evidence_redaction_avg_ms": (
+            stage_times["privacy_evidence"] * 1000 / evidence_redaction_frames
+            if evidence_redaction_frames
+            else 0.0
+        ),
         **{f"stage_{name}_s": value for name, value in stage_times.items()},
     }
     result = SurveyResult(

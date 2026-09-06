@@ -20,3 +20,10 @@
 - Author: [BasilLeaf](https://commons.wikimedia.org/wiki/User:BasilLeaf)
 - License: [CC0](https://creativecommons.org/publicdomain/zero/1.0/)
 - Original file: `https://upload.wikimedia.org/wikipedia/commons/a/ae/Nepal_License_Plate_-_Typical_Car_-_Front.png`
+
+## dashcam_plates_CC_BY_SA_4.0.jpg
+
+- Source: frame extracted from [Cars Moving into pothole](https://commons.wikimedia.org/wiki/File:Cars_Moving_into_pothole.webm)
+- Author: Amuzujoe
+- License: [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/)
+- Original video: `/home/ubuntu/assets/cars_moving_into_pothole_CC_BY_SA_4.0.webm`
