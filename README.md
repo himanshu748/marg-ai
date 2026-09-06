@@ -25,6 +25,9 @@ AWS upload -> S3 uploads -> SQS -> Fargate worker -> S3 survey outputs
                                       +-> DynamoDB -----+-> ALB/FastAPI dashboard
 ```
 
+The tracker applies configurable `min_observations` gating to discard only
+short, low-confidence tracks.
+
 ## Local quickstart
 
 ```bash
@@ -38,6 +41,18 @@ python -m venv /home/ubuntu/venv
 ```
 
 Open `http://localhost:8000`.
+
+### Privacy redaction
+
+When `VisionConfig.redact` is enabled (the default), OpenCV 5 DNN privacy
+detectors redact faces with YuNet (`face_detection_yunet_2023mar.onnx`, MIT)
+and plates with LPD-YuNet (`license_plate_detection_lpd_yunet_2023mar.onnx`,
+Apache-2.0). Plate search uses the full frame plus six overlapping upper and
+lower tiles; this avoids losing small plates in a 320x240 full-frame resize.
+Pixelation never modifies the protected road-damage bbox. `evidence_raw/` is
+retained only for agent re-inspection and is not served by the API.
+
+![Before and after privacy redaction](docs/samples/redaction_demo.jpg)
 
 ## AWS deployment
 
@@ -109,16 +124,33 @@ At the production threshold, precision was **0.8376** and recall was
 ### Deduplication evaluation
 
 Manual visible-pothole counts were made from the evidence frames and keyframes.
-The resulting detection-to-instance compression and unique-instance metrics are:
+`min_observations=2` drops a closed track only when it also has
+`best_fused_conf < 0.55`. Recall stayed at 1.000 on both videos.
 
-| Survey | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| pothole_cars | 21 | 4 | 5.25:1 | 1 | 0.250 | 1.000 |
-| pothole_kumasi | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
+| Survey | Stage | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| pothole_cars | Before gating | 21 | 4 | 5.25:1 | 1 | 0.250 | 1.000 |
+| pothole_cars | After gating | 21 | 3 | 7.00:1 | 1 | 0.333 | 1.000 |
+| pothole_kumasi | Before gating | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
+| pothole_kumasi | After gating | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
+
+The latest privacy-enabled demo runs recorded 21 redactions for
+`pothole_cars` and 19 for `pothole_kumasi`. Evidence redaction averaged
+332.57 ms and 345.81 ms per evidence frame respectively.
 
 Per-instance observation counts are `[2, 1, 4, 14]` for `pothole_cars` and
 `[62, 32, 2]` for `pothole_kumasi`. Full output is in
 `eval/results/dedupe.md`.
+
+### Run the test suite / CI
+
+```bash
+/home/ubuntu/venv/bin/ruff check .
+/home/ubuntu/venv/bin/python -m pytest -q
+```
+
+The same Ruff and pytest checks run on pushes and pull requests in GitHub
+Actions. The current local suite passes **22 tests**.
 
 ## Licenses and attribution
 

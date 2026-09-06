@@ -21,7 +21,9 @@ cd /home/ubuntu/repos/marg-ai
 
 **Voice-over:** “The pipeline reads video timing and optional GPS, filters
 poor-quality frames, selects stable keyframes, detects the four RDD2022
-classes, tracks observations, estimates severity, and saves evidence.”
+classes, tracks observations, estimates severity, and saves evidence. Its
+OpenCV 5 YuNet privacy pass tiles the frame for small plates and pixelates
+detected faces and plates without touching the damage bbox.”
 
 ```bash
 /home/ubuntu/venv/bin/python -m marg.vision.pipeline \
@@ -110,8 +112,8 @@ cat docs/failures/README.md
 **Voice-over:** “The same data contract is prepared for S3, SQS, DynamoDB,
 Fargate Graviton, and an ALB. AWS deployment is pending account activation,
 so the local results are the verified evidence today. Future work includes
-privacy redaction, real GPS validation, calibrated severity, and a live
-Graviton benchmark.”
+stronger privacy recall on small or distant plates, real GPS validation,
+calibrated severity, and a live Graviton benchmark.”
 
 ```bash
 /home/ubuntu/venv/bin/ruff check .

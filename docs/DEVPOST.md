@@ -33,7 +33,8 @@ approval actions.
 The vision path uses OpenCV 5 Python APIs: `VideoCapture`, Laplacian quality
 scoring, ORB and RANSAC homography keyframes, OpenCV DNN ONNX YOLOv8
 inference, Farneback optical flow, perspective transforms for severity, and
-classical LAB/texture cues. Pydantic models define a durable survey contract.
+classical LAB/texture cues. OpenCV Zoo YuNet and tiled LPD-YuNet provide
+best-effort face and plate redaction at write time. Pydantic models define a durable survey contract.
 The agent has explicit tools, a JSONL trace, a deterministic MockLLM for
 reproducible tests, a Bedrock Converse wrapper, and a pure auditor. The local
 dashboard serves JSON survey directories. The AWS target uses S3, SQS,
@@ -73,11 +74,11 @@ haze, glare, vehicles, and small distant defects.
 
 ## What's next
 
-Before operational use, MargAI needs privacy redaction for faces and plates,
-calibrated physical severity, real GPS and map-matching validation, official
-dataset-license clarification, broader hard-negative evaluation, and a live
-ARM64 Graviton benchmark. The AWS deployment will be activated and verified
-when the account services are enabled.
+Before operational use, MargAI needs stronger privacy recall on small plates
+and non-frontal faces, calibrated physical severity, real GPS and map-matching
+validation, official dataset-license clarification, broader hard-negative
+evaluation, and a live ARM64 Graviton benchmark. The AWS deployment will be
+activated and verified when the account services are enabled.
 
 ## Built with
 
