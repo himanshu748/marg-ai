@@ -1,6 +1,6 @@
 services:
   - hostname: margai
-    type: python@3.12
+    type: ubuntu@26.04
     enableSubdomainAccess: true
     minContainers: 1
     verticalAutoscaling:

@@ -51,8 +51,9 @@ Tight crops lost road context during agent inspection, which led to a
 context-window rerun and IoU-aware confirmation rule. The official India
 archive was inaccessible from the evaluation environment, so a derived
 Hugging Face slice was used and its licensing caveat was recorded explicitly.
-Finally, AWS service activation blocked live deployment; the implementation
-and deployment templates remain reproducible without claiming a live result.
+AWS service activation blocked the competition deployment, so the public
+read-only dashboard is currently hosted as an interim Zerops demo:
+https://margai-2ab8-8080.prg1.zerops.app/
 
 ## Accomplishments
 
@@ -111,7 +112,7 @@ activated and verified when the account services are enabled.
 - [x] Architecture diagram: `docs/ARCHITECTURE.md`,
   `docs/architecture.svg`, and rendered `docs/architecture.png`
 - [x] Local build, deploy, and test instructions in `README.md`
-- [ ] Live endpoint: pending AWS account activation and deployment
+- [x] Interim live endpoint (public, read-only): https://margai-2ab8-8080.prg1.zerops.app/
 - [ ] Demonstration video, maximum five minutes: record using
   `docs/VIDEO_SCRIPT.md`
 - [x] Evaluation evidence: detector, deduplication, agent tables, and eight

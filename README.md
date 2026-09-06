@@ -7,8 +7,8 @@ detects RDD2022 cracks and potholes, tracks observations into instances,
 preserves full-resolution evidence, and uses an approval-gated agent to draft
 municipal work orders.
 
-**Live demo (public, read-only):** interim Zerops hosting while the AWS
-competition deployment remains pending.
+**Live demo (public, read-only):** [Zerops dashboard](https://margai-2ab8-8080.prg1.zerops.app/)
+is interim hosting while the AWS competition deployment remains pending.
 
 ## Architecture
 

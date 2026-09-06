@@ -1,23 +1,24 @@
 zerops:
   - setup: margai
     build:
-      base: python@3.12
+      base: ubuntu@26.04
       prepareCommands:
-        - sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
+        - sudo apt-get update
+        - sudo apt-get install -y python3 python3-pip python3-venv libgl1 libglib2.0-0
       buildCommands:
-        - python -m pip install --upgrade pip
-        - python -m pip install '.[api]'
+        - cd /build/source && python3 -m pip install --break-system-packages --upgrade pip
+        - cd /build/source && python3 -m pip install --break-system-packages --target vendor '.[api]'
       deployFiles:
         - marg
         - models
         - demo
-        - pyproject.toml
+        - vendor
       cache: []
     run:
-      base: python@3.12
+      base: ubuntu@26.04
       prepareCommands:
-        - sudo apt-get update && sudo apt-get install -y libgl1 libglib2.0-0
-        - python -m pip install '.[api]'
+        - sudo apt-get update
+        - sudo apt-get install -y python3 python3-pip python3-venv libgl1 libglib2.0-0
       ports:
         - port: 8080
           httpSupport: true
@@ -25,7 +26,7 @@ zerops:
         PORT: "8080"
         MARG_DATA_ROOT: demo
         MARG_READ_ONLY: "1"
-      start: python -m marg.entrypoint
+      start: PYTHONPATH=vendor python3 -m marg.entrypoint
       healthCheck:
         httpGet:
           port: 8080
