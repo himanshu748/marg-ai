@@ -36,6 +36,7 @@
     async function get(path, options) { const response = await fetch(path, options); if (!response.ok) throw new Error(await response.text()); return response.json(); }
     function stat(label,value) { return `<div class="stat"><b>${esc(value)}</b><span>${label}</span></div>`; }
     function severityColor(s) { return s >= 4 ? '#e05252' : s === 3 ? '#ffd166' : '#53c878'; }
+    async function loadHealth() { const health = await get('/api/health'); if (health.read_only) { document.querySelectorAll('#upload input,#upload button').forEach(control => control.disabled = true); $('uploadStatus').textContent = 'Uploads are disabled on the public demo; run locally or on AWS'; } }
     async function loadSurveys() { const surveys = await get('/api/surveys'); $('survey').innerHTML = surveys.map(s => `<option value="${esc(s.id)}">${esc(s.id)}${s.status&&s.status!=='done'?` (${esc(s.status)})`:''}</option>`).join(''); const ready=surveys.find(s=>s.status==='done')||surveys[0]; if (ready&&ready.status==='done') await loadSurvey(ready.id); else if (ready) $('stats').innerHTML=stat('status',ready.status); }
     async function loadSurvey(id) {
       currentId = id; current = await get(`/api/surveys/${encodeURIComponent(id)}`); $('survey').value=id; markers.clearLayers();
@@ -52,7 +53,7 @@
     $('survey').onchange=e=>loadSurvey(e.target.value); $('run').onclick=async()=>{ await get(`/api/surveys/${encodeURIComponent(currentId)}/run_agent?llm=mock`,{method:'POST'}); const started=Date.now(); const poll=setInterval(async()=>{ try { await get(`/api/surveys/${encodeURIComponent(currentId)}/agent`); clearInterval(poll); await renderTrace(currentId); await renderOrders(currentId); } catch {} if(Date.now()-started>60000) clearInterval(poll); },2000); };
     $('upload').onsubmit=async event=>{ event.preventDefault(); const form=new FormData(event.target); $('uploadStatus').textContent='Uploading…'; try { const response=await fetch('/api/surveys/upload',{method:'POST',body:form}); if(!response.ok) throw new Error(await response.text()); const value=await response.json(); $('uploadStatus').textContent=`${value.survey_id}: queued`; await loadSurveys(); const poll=setInterval(async()=>{ try { const status=await get(`/api/surveys/${encodeURIComponent(value.survey_id)}/status`); $('uploadStatus').textContent=`${value.survey_id}: ${status.status}`; if(status.status==='done'||status.status==='failed'){clearInterval(poll); await loadSurveys();} } catch {} },5000); } catch(error) { $('uploadStatus').textContent=String(error); } };
     document.querySelectorAll('.tab').forEach(button=>button.onclick=()=>{document.querySelectorAll('.tab,.tabpane').forEach(el=>el.classList.remove('active'));button.classList.add('active');$(button.dataset.tab).classList.add('active');});
-    loadSurveys().catch(error=>{$('stats').textContent=error;});
+    Promise.all([loadHealth(), loadSurveys()]).catch(error=>{$('stats').textContent=error;});
   </script>
 </body>
 </html>

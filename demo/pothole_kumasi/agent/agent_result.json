@@ -1,0 +1,344 @@
+{
+  "trace": [
+    {
+      "step": 0,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Inspect low-confidence instance 2 under policy rule 1."
+      },
+      "latency_ms": 0.01928400001816044,
+      "model_text": "Inspect low-confidence instance 2 under policy rule 1."
+    },
+    {
+      "step": 1,
+      "tool": "inspect_roi",
+      "input": {
+        "instance_id": 2
+      },
+      "output": {
+        "detections": [
+          {
+            "class": "D40",
+            "conf": 0.3656937777996063,
+            "bbox": [
+              255.99062500000002,
+              335.27812500000005,
+              104.390625,
+              63.862500000000004
+            ]
+          }
+        ],
+        "confirmed": false,
+        "best_match_conf": 0.3656937777996063,
+        "iou": 0.0063022287302351085,
+        "crop_path": "inspect_inst_0002.jpg"
+      },
+      "latency_ms": 812.0396199999504,
+      "model_text": ""
+    },
+    {
+      "step": 2,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Escalate segment 0 under policy rule 3."
+      },
+      "latency_ms": 0.03781800000979274,
+      "model_text": "Escalate segment 0 under policy rule 3."
+    },
+    {
+      "step": 3,
+      "tool": "draft_work_order",
+      "input": {
+        "segment_id": 0,
+        "priority": "high",
+        "summary": "Road damage severity 5.",
+        "reason": "D40 instance 0 has severity 5 and fused confidence 0.62."
+      },
+      "output": {
+        "work_order_id": "70f2959098af4ba6961be22f7bdbbe8e",
+        "segment_id": 0,
+        "instance_ids": [
+          0
+        ],
+        "instances": [
+          {
+            "id": 0,
+            "class": "D40",
+            "severity": 5,
+            "area_m2": 21.8531999817914,
+            "fused_conf": 0.618238655063841,
+            "lat": 28.614462005928853,
+            "lon": 77.209,
+            "evidence": "inst_0000.jpg"
+          }
+        ],
+        "priority": "high",
+        "title": "Pothole repair \u2014 1 D40 pothole, ~22 m\u00b2, sev 5",
+        "summary": "Road damage severity 5.",
+        "reason": "D40 instance 0 has severity 5 and fused confidence 0.62.",
+        "status": "pending_approval",
+        "approval_requested": true
+      },
+      "latency_ms": 0.6027219999396038,
+      "model_text": ""
+    },
+    {
+      "step": 4,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Escalate segment 1 under policy rule 3."
+      },
+      "latency_ms": 0.025182999934258987,
+      "model_text": "Escalate segment 1 under policy rule 3."
+    },
+    {
+      "step": 5,
+      "tool": "draft_work_order",
+      "input": {
+        "segment_id": 1,
+        "priority": "high",
+        "summary": "Road damage severity 5.",
+        "reason": "D40 instance 1 has severity 5 and fused confidence 0.63."
+      },
+      "output": {
+        "work_order_id": "66fb902f1cf2499587d04902c4248e3a",
+        "segment_id": 1,
+        "instance_ids": [
+          1,
+          2
+        ],
+        "instances": [
+          {
+            "id": 1,
+            "class": "D40",
+            "severity": 5,
+            "area_m2": 17.485341938619495,
+            "fused_conf": 0.6280938302648479,
+            "lat": 28.61492659749671,
+            "lon": 77.209,
+            "evidence": "inst_0001.jpg"
+          },
+          {
+            "id": 2,
+            "class": "D40",
+            "severity": 5,
+            "area_m2": 238.58534639704214,
+            "fused_conf": 0.4445579131847661,
+            "lat": 28.61482168972332,
+            "lon": 77.209,
+            "evidence": "inst_0002.jpg"
+          }
+        ],
+        "priority": "high",
+        "title": "Pothole repair \u2014 2 D40 potholes, ~256 m\u00b2, sev 5",
+        "summary": "Road damage severity 5.",
+        "reason": "D40 instance 1 has severity 5 and fused confidence 0.63.",
+        "status": "pending_approval",
+        "approval_requested": true
+      },
+      "latency_ms": 0.21329299988792627,
+      "model_text": ""
+    },
+    {
+      "step": 6,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Compare frames for uncertain instance 2 under policy rule 1."
+      },
+      "latency_ms": 0.01242300004378194,
+      "model_text": "Compare frames for uncertain instance 2 under policy rule 1."
+    },
+    {
+      "step": 7,
+      "tool": "compare_frames",
+      "input": {
+        "instance_id": 2
+      },
+      "output": {
+        "frame_confs": [
+          0.3183961510658264,
+          0.2771482467651367
+        ],
+        "classes_seen": [
+          "D40",
+          "D40"
+        ],
+        "agreement_ratio": 1.0
+      },
+      "latency_ms": 0.0174859999333421,
+      "model_text": ""
+    },
+    {
+      "step": 8,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Dismiss unconfirmed instance 2 under policy rule 1."
+      },
+      "latency_ms": 0.01065500009644893,
+      "model_text": "Dismiss unconfirmed instance 2 under policy rule 1."
+    },
+    {
+      "step": 9,
+      "tool": "dismiss_instance",
+      "input": {
+        "instance_id": 2,
+        "reason": "unconfirmed"
+      },
+      "output": {
+        "instance_id": 2,
+        "reason": "unconfirmed",
+        "status": "dismissed"
+      },
+      "latency_ms": 0.1662579998082947,
+      "model_text": ""
+    },
+    {
+      "step": 10,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Request approval for work order 70f2959098af4ba6961be22f7bdbbe8e under policy rule 3."
+      },
+      "latency_ms": 0.028604000135601382,
+      "model_text": "Request approval for work order 70f2959098af4ba6961be22f7bdbbe8e under policy rule 3."
+    },
+    {
+      "step": 11,
+      "tool": "request_human_approval",
+      "input": {
+        "work_order_id": "70f2959098af4ba6961be22f7bdbbe8e"
+      },
+      "output": {
+        "work_order_id": "70f2959098af4ba6961be22f7bdbbe8e",
+        "status": "pending_approval"
+      },
+      "latency_ms": 0.20174099995529104,
+      "model_text": ""
+    },
+    {
+      "step": 12,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Request approval for work order 66fb902f1cf2499587d04902c4248e3a under policy rule 3."
+      },
+      "latency_ms": 0.027198999987376737,
+      "model_text": "Request approval for work order 66fb902f1cf2499587d04902c4248e3a under policy rule 3."
+    },
+    {
+      "step": 13,
+      "tool": "request_human_approval",
+      "input": {
+        "work_order_id": "66fb902f1cf2499587d04902c4248e3a"
+      },
+      "output": {
+        "work_order_id": "66fb902f1cf2499587d04902c4248e3a",
+        "status": "pending_approval"
+      },
+      "latency_ms": 0.1544579999972484,
+      "model_text": ""
+    },
+    {
+      "step": 14,
+      "tool": "model",
+      "input": {},
+      "output": {
+        "text": "Finalize the survey review under policy rule 5."
+      },
+      "latency_ms": 0.038177000078576384,
+      "model_text": "Finalize the survey review under policy rule 5."
+    },
+    {
+      "step": 15,
+      "tool": "finalize",
+      "input": {
+        "summary": "Review complete; uncertainty and escalations were recorded."
+      },
+      "output": {
+        "status": "finalized",
+        "summary": "Review complete; uncertainty and escalations were recorded."
+      },
+      "latency_ms": 0.0031949998628988396,
+      "model_text": ""
+    }
+  ],
+  "summary": "Review complete; uncertainty and escalations were recorded.",
+  "work_orders": [
+    {
+      "work_order_id": "70f2959098af4ba6961be22f7bdbbe8e",
+      "segment_id": 0,
+      "instance_ids": [
+        0
+      ],
+      "instances": [
+        {
+          "id": 0,
+          "class": "D40",
+          "severity": 5,
+          "area_m2": 21.8531999817914,
+          "fused_conf": 0.618238655063841,
+          "lat": 28.614462005928853,
+          "lon": 77.209,
+          "evidence": "inst_0000.jpg"
+        }
+      ],
+      "priority": "high",
+      "title": "Pothole repair \u2014 1 D40 pothole, ~22 m\u00b2, sev 5",
+      "summary": "Road damage severity 5.",
+      "reason": "D40 instance 0 has severity 5 and fused confidence 0.62.",
+      "status": "pending_approval",
+      "approval_requested": true
+    },
+    {
+      "work_order_id": "66fb902f1cf2499587d04902c4248e3a",
+      "segment_id": 1,
+      "instance_ids": [
+        1,
+        2
+      ],
+      "instances": [
+        {
+          "id": 1,
+          "class": "D40",
+          "severity": 5,
+          "area_m2": 17.485341938619495,
+          "fused_conf": 0.6280938302648479,
+          "lat": 28.61492659749671,
+          "lon": 77.209,
+          "evidence": "inst_0001.jpg"
+        },
+        {
+          "id": 2,
+          "class": "D40",
+          "severity": 5,
+          "area_m2": 238.58534639704214,
+          "fused_conf": 0.4445579131847661,
+          "lat": 28.61482168972332,
+          "lon": 77.209,
+          "evidence": "inst_0002.jpg"
+        }
+      ],
+      "priority": "high",
+      "title": "Pothole repair \u2014 2 D40 potholes, ~256 m\u00b2, sev 5",
+      "summary": "Road damage severity 5.",
+      "reason": "D40 instance 1 has severity 5 and fused confidence 0.63.",
+      "status": "pending_approval",
+      "approval_requested": true
+    }
+  ],
+  "resurveys": [],
+  "dismissals": [
+    {
+      "instance_id": 2,
+      "reason": "unconfirmed",
+      "status": "dismissed"
+    }
+  ],
+  "forced_finalize": false,
+  "tool_call_count": 8
+}

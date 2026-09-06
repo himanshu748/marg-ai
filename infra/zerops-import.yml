@@ -1,0 +1,8 @@
+services:
+  - hostname: margai
+    type: python@3.12
+    enableSubdomainAccess: true
+    minContainers: 1
+    verticalAutoscaling:
+      minRam: 1
+      maxRam: 2

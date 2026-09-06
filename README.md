@@ -7,6 +7,9 @@ detects RDD2022 cracks and potholes, tracks observations into instances,
 preserves full-resolution evidence, and uses an approval-gated agent to draft
 municipal work orders.
 
+**Live demo (public, read-only):** interim Zerops hosting while the AWS
+competition deployment remains pending.
+
 ## Architecture
 
 ```text
@@ -41,6 +44,12 @@ python -m venv /home/ubuntu/venv
 ```
 
 Open `http://localhost:8000`.
+
+For a zero-setup judge quickstart using the committed demo surveys:
+
+```bash
+MARG_DATA_ROOT=demo python -m marg.entrypoint
+```
 
 ### Privacy redaction
 
