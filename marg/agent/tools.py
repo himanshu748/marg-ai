@@ -8,6 +8,7 @@ import cv2
 from marg.store.local import LocalStore
 from marg.vision.detector import DNNDetector
 from marg.vision.models import SurveyInstance, SurveyResult
+from marg.vision.privacy import detect_sensitive_regions, redact
 
 TOOL_SPECS: list[dict[str, object]] = [
     {
@@ -157,6 +158,8 @@ class ToolSet:
             (0, 0, 255),
             2,
         )
+        protect = [(float(original[0]), float(original[1]), float(original[2]), float(original[3]))]
+        annotated, _ = redact(annotated, detect_sensitive_regions(annotated), protect=protect)
         cv2.imwrite(str(crop_path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 92])
         matching = [(item, overlap) for item, overlap in mapped_detections if item["class"] == instance.class_name]
         best_match, best_iou = max(
@@ -310,9 +313,6 @@ class ToolSet:
     def _best_keyframe(self, instance: SurveyInstance) -> Path | None:
         for path in self.context.result.keyframe_paths:
             resolved = self._resolve_path(path)
-            raw_path = resolved.parent.parent / "keyframes_raw" / resolved.name
-            if raw_path.is_file():
-                resolved = raw_path
             if any(f"kf_{keyframe_id:05d}" in resolved.name for keyframe_id in instance.keyframe_ids):
                 return resolved
         for keyframe_id in instance.keyframe_ids:
@@ -321,9 +321,6 @@ class ToolSet:
                 return path
         for candidate in self.context.result.keyframe_paths:
             path = self._resolve_path(candidate)
-            raw_path = path.parent.parent / "keyframes_raw" / path.name
-            if raw_path.is_file():
-                path = raw_path
             if path.exists():
                 return path
         return None

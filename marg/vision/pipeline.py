@@ -34,7 +34,6 @@ def run(
     (output_dir / "crops").mkdir(exist_ok=True)
     (output_dir / "evidence").mkdir(exist_ok=True)
     (output_dir / "evidence_raw").mkdir(exist_ok=True)
-    (output_dir / "keyframes_raw").mkdir(exist_ok=True)
     model_path = config.model_file(Path(__file__).resolve().parents[2])
     detector = DNNDetector(model_path, config)
     selector = KeyframeSelector(config)
@@ -133,8 +132,6 @@ def run(
                 _draw_detection(annotated, detection, instance_id)
                 rendered.append((instance_id, detection))
             path = output_dir / "keyframes" / f"kf_{keyframe.keyframe_id:05d}.jpg"
-            raw_path = output_dir / "keyframes_raw" / path.name
-            cv2.imwrite(str(raw_path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
             if config.redact:
                 annotated, count = redact(
                     annotated,

@@ -42,6 +42,29 @@ def test_sensitive_region_detection_on_bengaluru_fixture() -> None:
     assert isinstance(regions, list)
 
 
+@pytest.mark.parametrize(
+    ("filename", "minimum"),
+    [("privacy_face_cc0.jpg", 1), ("privacy_plate_cc0.png", 1)],
+)
+def test_sensitive_fixture_detection_and_redaction(filename: str, minimum: int) -> None:
+    image = cv2.imread(str(Path(__file__).parent / "fixtures" / filename))
+    regions = detect_sensitive_regions(image)
+    assert len(regions) >= minimum
+    for x, y, width, height in regions:
+        output, count = redact(image, [(
+            x,
+            y,
+            width,
+            height,
+        )])
+        original_region = image[y : y + height, x : x + width]
+        redacted_region = output[y : y + height, x : x + width]
+        assert count == 1
+        assert np.var(redacted_region.astype(np.float32)) < np.var(
+            original_region.astype(np.float32)
+        ) * 0.5
+
+
 @pytest.mark.skipif(
     not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
     reason="ONNX detector model is not present in this checkout",
