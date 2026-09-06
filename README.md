@@ -1,3 +1,5 @@
+[![CI](https://github.com/himanshu748/marg-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/himanshu748/marg-ai/actions/workflows/ci.yml)
+
 # MargAI
 
 MargAI is an OpenCV road-damage survey agent. It processes dashcam video,

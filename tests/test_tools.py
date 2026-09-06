@@ -1,10 +1,17 @@
 from pathlib import Path
 
+import pytest
+
 from marg.agent.tools import ToolContext, ToolSet
 from marg.store.local import LocalStore
 from marg.vision.config import VisionConfig
 from marg.vision.detector import DNNDetector
 from marg.vision.models import Segment, SurveyInstance, SurveyResult
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
+    reason="ONNX detector model is not present in this checkout",
+)
 
 
 def test_inspect_roi_on_bengaluru_fixture(tmp_path: Path) -> None:

@@ -98,3 +98,4 @@ class SurveyResult(BaseModel):
     keyframe_paths: list[str] = Field(default_factory=list)
     crop_paths: list[str] = Field(default_factory=list)
     metrics: dict[str, float] = Field(default_factory=dict)
+    redactions: int = 0

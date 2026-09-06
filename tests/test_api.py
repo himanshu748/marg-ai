@@ -3,10 +3,16 @@ import shutil
 import time
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from marg.api.app import create_app
 from marg.vision.models import Segment, SurveyInstance, SurveyResult
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
+    reason="ONNX detector model is not present in this checkout",
+)
 
 
 def _write_fixture(root: Path) -> None:

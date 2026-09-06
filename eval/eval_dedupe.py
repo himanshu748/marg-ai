@@ -7,6 +7,19 @@ MANUAL_VISIBLE_POTHOLES = {
     "pothole_kumasi": 2,
 }
 
+BEFORE = {
+    "pothole_cars": {
+        "detections": 21,
+        "instances": 4,
+        "observation_counts": [2, 1, 4, 14],
+    },
+    "pothole_kumasi": {
+        "detections": 96,
+        "instances": 3,
+        "observation_counts": [62, 32, 2],
+    },
+}
+
 
 def evaluate_survey(path: Path) -> dict[str, object]:
     result = json.loads((path / "result.json").read_text(encoding="utf-8"))
@@ -49,9 +62,39 @@ def main() -> None:
             "Occluded or partially visible regions were counted once."
         ),
         "",
+        "## Before observation gating",
+        "",
         "| Survey | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
+    for survey, values in BEFORE.items():
+        visible = MANUAL_VISIBLE_POTHOLES[survey]
+        instances = int(values["instances"])
+        detections = int(values["detections"])
+        markdown.append(
+            f"| {survey} | {detections} | {instances} | "
+            f"{detections / max(1, instances):.2f}:1 | {visible} | "
+            f"{visible / max(1, instances):.3f} | "
+            f"{min(1.0, instances / max(1, visible)):.3f} |"
+        )
+    markdown.extend(
+        [
+            "",
+            "| Survey | Per-instance observation counts |",
+            "| --- | --- |",
+        ]
+    )
+    for survey, values in BEFORE.items():
+        markdown.append(f"| {survey} | {', '.join(str(value) for value in values['observation_counts'])} |")
+    markdown.extend(
+        [
+            "",
+            "## After observation gating (`min_observations=2`)",
+            "",
+            "| Survey | Detections | Instances | Compression | Visible potholes | Unique precision | Unique recall |",
+            "| --- | ---: | ---: | ---: | ---: | ---: | ---: |",
+        ]
+    )
     for row in rows:
         markdown.append(
             f"| {row['survey']} | {row['detections']} | {row['instances']} | "

@@ -8,9 +8,9 @@
       "model",
       "inspect_roi",
       "model",
-      "draft_work_order",
+      "compare_frames",
       "model",
-      "request_human_approval",
+      "dismiss_instance",
       "model",
       "finalize"
     ]

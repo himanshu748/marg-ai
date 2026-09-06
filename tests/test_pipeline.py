@@ -1,7 +1,14 @@
 from pathlib import Path
 
+import pytest
+
 from marg.vision.config import VisionConfig
 from marg.vision.pipeline import run
+
+pytestmark = pytest.mark.skipif(
+    not (Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx").exists(),
+    reason="ONNX detector model is not present in this checkout",
+)
 
 
 def test_pipeline_end_to_end(tmp_path: Path) -> None:
