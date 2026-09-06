@@ -7,9 +7,6 @@ detects RDD2022 cracks and potholes, tracks observations into instances,
 preserves full-resolution evidence, and uses an approval-gated agent to draft
 municipal work orders.
 
-**Live demo (public, read-only):** [Zerops dashboard](https://margai-2ab8-8080.prg1.zerops.app/)
-is interim hosting while the AWS competition deployment remains pending.
-
 ## Architecture
 
 ```text
@@ -65,6 +62,7 @@ retained only for agent re-inspection and is not served by the API.
 
 ## AWS deployment
 
+The AWS stack in `infra/deploy.sh` is the live deployment target.
 The deployment uses one public-IP Fargate task, an ALB, S3, SQS, DynamoDB,
 ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
 1 vCPU and 2 GB memory.

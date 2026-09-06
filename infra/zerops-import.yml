@@ -1,8 +1,0 @@
-services:
-  - hostname: margai
-    type: ubuntu@26.04
-    enableSubdomainAccess: true
-    minContainers: 1
-    verticalAutoscaling:
-      minRam: 1
-      maxRam: 2
