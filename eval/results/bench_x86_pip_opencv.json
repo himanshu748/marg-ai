@@ -1,0 +1,73 @@
+{
+  "label": "x86_pip_opencv",
+  "environment": {
+    "platform_machine": "x86_64",
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8375C CPU @ 2.90GHz",
+    "cpu_count": 2,
+    "opencv_version": "5.0.0",
+    "opencv_threads": 2,
+    "opencv_package": "opencv-python",
+    "parallel_framework": "pthreads",
+    "cpu_hw_features_baseline": "SSE SSE2 SSE3",
+    "cpu_hw_features_dispatched": "",
+    "cool_present": false
+  },
+  "videos": [
+    {
+      "video": "/home/ubuntu/assets/cars_moving_into_pothole_CC_BY_SA_4.0.webm",
+      "name": "cars_moving_into_pothole_CC_BY_SA_4.0.webm",
+      "repeats": 2,
+      "frames": 621,
+      "processed_frames": 207,
+      "keyframes": 14,
+      "wall_s": 80.6498894975,
+      "fps_source": 7.69994855379498,
+      "fps_processed": 2.5666495179316597,
+      "stage_metrics": {
+        "stage_decode_s": 5.054896315999912,
+        "stage_quality_s": 0.514242111500181,
+        "stage_keyframes_s": 6.863190393500048,
+        "stage_detect_s": 48.02692088000035,
+        "stage_track_s": 0.0229417939999621,
+        "stage_privacy_evidence_s": 5.258220008000023
+      },
+      "stage_decode_s": 5.054896315999912,
+      "stage_quality_s": 0.514242111500181,
+      "stage_keyframes_s": 6.863190393500048,
+      "stage_detect_s": 48.02692088000035,
+      "stage_track_s": 0.0229417939999621,
+      "stage_privacy_evidence_s": 5.258220008000023
+    },
+    {
+      "video": "/home/ubuntu/assets/pothole_kumasi_CC_BY_SA_4.0.ogv",
+      "name": "pothole_kumasi_CC_BY_SA_4.0.ogv",
+      "repeats": 2,
+      "frames": 420,
+      "processed_frames": 140,
+      "keyframes": 15,
+      "wall_s": 57.41602394450001,
+      "fps_source": 7.315031086199632,
+      "fps_processed": 2.4383436953998774,
+      "stage_metrics": {
+        "stage_decode_s": 1.3676188395000963,
+        "stage_quality_s": 0.33012214900037407,
+        "stage_keyframes_s": 4.011526536999497,
+        "stage_detect_s": 32.38519433050044,
+        "stage_track_s": 0.018289540500347812,
+        "stage_privacy_evidence_s": 6.225210694499822
+      },
+      "stage_decode_s": 1.3676188395000963,
+      "stage_quality_s": 0.33012214900037407,
+      "stage_keyframes_s": 4.011526536999497,
+      "stage_detect_s": 32.38519433050044,
+      "stage_track_s": 0.018289540500347812,
+      "stage_privacy_evidence_s": 6.225210694499822
+    }
+  ],
+  "detector": {
+    "images": 200,
+    "median_ms": 229.54898350002395,
+    "p95_ms": 236.08529170000452,
+    "images_per_second": 4.340474237456809
+  }
+}
