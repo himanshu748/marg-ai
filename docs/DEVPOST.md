@@ -100,9 +100,9 @@ activated and verified when the account services are enabled.
 
 - **Agentic Vision:** included. The agent inspects evidence, applies explicit
   policy rules, writes a trace, and gates work orders behind human approval.
-- **COOL:** planned, pending Graviton benchmark. The deployment target is
-  ARM64 Fargate and the project research includes the OpenCV COOL ARM image,
-  but a live benchmark has not yet been run.
+- **COOL:** x86/pip-OpenCV baseline recorded in `docs/BENCHMARK.md`;
+  Graviton + COOL remains pending AWS account activation. The pending run is
+  `eval/bench_cool.py run --label graviton_cool` inside the arm64 container.
 
 ## Submission checklist
 

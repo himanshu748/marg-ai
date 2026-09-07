@@ -7,6 +7,8 @@ detects RDD2022 cracks and potholes, tracks observations into instances,
 preserves full-resolution evidence, and uses an approval-gated agent to draft
 municipal work orders.
 
+![Annotated pothole survey](docs/samples/pothole_cars_annotated.gif)
+
 ## Architecture
 
 ```text
@@ -108,6 +110,9 @@ definition. The worker uses the MockLLM by default; set
 /home/ubuntu/venv/bin/python eval/eval_dedupe.py
 ```
 
+The x86 OpenCV baseline and the pending Graviton + COOL comparison are
+documented in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+
 ### Detector evaluation
 
 The OpenCV DNN detector was evaluated on a 600-image labelled India slice from
@@ -157,7 +162,7 @@ Per-instance observation counts are `[2, 1, 4, 14]` for `pothole_cars` and
 ```
 
 The same Ruff and pytest checks run on pushes and pull requests in GitHub
-Actions. The current local suite passes **22 tests**.
+Actions. The current local suite passes **25 tests**.
 
 ## Licenses and attribution
 

@@ -12,3 +12,4 @@ out/
 *.mov
 !tests/fixtures/clip3s.mp4
 tests/agent_crops/
+docs/samples/*.mp4
