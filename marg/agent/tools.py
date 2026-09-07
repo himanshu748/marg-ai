@@ -79,8 +79,11 @@ class ToolSet:
         self.context = context
         self.finalized = False
         self.summary = ""
+        self.inspections: dict[int, dict[str, object]] = {}
 
     def call(self, name: str, arguments: dict[str, object]) -> dict[str, object]:
+        if self.finalized:
+            return {"error": "Review has already been finalized"}
         functions = {
             "inspect_roi": self.inspect_roi,
             "compare_frames": self.compare_frames,
@@ -93,7 +96,22 @@ class ToolSet:
         function = functions.get(name)
         if function is None:
             return {"error": f"Unknown tool: {name}"}
-        return function(**arguments)
+        spec = next(item["toolSpec"]["inputSchema"]["json"] for item in TOOL_SPECS if item["toolSpec"]["name"] == name)
+        properties = spec["properties"]
+        if any(key not in properties for key in arguments) or any(key not in arguments for key in spec["required"]):
+            return {"error": "Tool arguments do not match the declared schema"}
+        for key, value in arguments.items():
+            expected = properties[key]
+            if expected["type"] == "integer" and (isinstance(value, bool) or not isinstance(value, int)):
+                return {"error": f"{key} must be an integer"}
+            if expected["type"] == "string" and (not isinstance(value, str) or not value.strip() or len(value) > 4000):
+                return {"error": f"{key} must be a nonempty string of at most 4000 characters"}
+            if "enum" in expected and value not in expected["enum"]:
+                return {"error": f"Invalid {key}"}
+        output = function(**arguments)
+        if name == "inspect_roi":
+            self.inspections[int(arguments["instance_id"])] = output
+        return output
 
     def inspect_roi(self, instance_id: int) -> dict[str, object]:
         instance = self._instance(instance_id)
@@ -199,6 +217,11 @@ class ToolSet:
         }
 
     def request_resurvey(self, segment_id: int, reason: str) -> dict[str, object]:
+        if not any(item.id == segment_id for item in self.context.result.segments):
+            return {"error": "segment not found"}
+        existing = next((item for item in self.context.resurveys if item["segment_id"] == segment_id), None)
+        if existing is not None:
+            return existing
         resurvey_id = uuid.uuid4().hex
         value: dict[str, object] = {
             "resurvey_id": resurvey_id,
@@ -220,10 +243,27 @@ class ToolSet:
         if priority not in {"low", "medium", "high"}:
             return {"error": "priority must be low, medium, or high"}
         segment = next((item for item in self.context.result.segments if item.id == segment_id), None)
-        instance_ids = segment.instance_ids if segment is not None else []
+        if segment is None:
+            return {"error": "segment not found"}
+        dismissed = {item["instance_id"] for item in self.context.dismissals}
+        instance_ids = [item for item in segment.instance_ids if item not in dismissed]
         instances = [
             item for item in self.context.result.instances if item.id in instance_ids
         ]
+        if not instances:
+            return {"error": "segment has no actionable damage instances"}
+        if any(item.fused_conf < 0.55 and not self.inspections.get(item.id, {}).get("confirmed") for item in instances):
+            return {"error": "low-confidence evidence must be confirmed by inspection before drafting"}
+        required_priority = "high" if any(item.severity == 5 for item in instances) else "medium"
+        needs_approval = any(item.severity >= 4 for item in instances) or sum(item.class_name == "D40" for item in instances) >= 3
+        if needs_approval and priority != required_priority:
+            return {"error": f"this segment requires {required_priority} priority and human approval"}
+        if not needs_approval and (priority != "low" or len(instances) < 2 or any(item.severity > 2 for item in instances)):
+            return {"error": "this segment does not meet the work-order policy; retain the evidence or request a resurvey"}
+        existing = next((item for item in self.context.work_orders if item["segment_id"] == segment_id), None)
+        if existing is not None:
+            return existing
+        instance_ids = [item.id for item in instances]
         total_area = sum(item.area_m2 for item in instances)
         max_severity = max((item.severity for item in instances), default=0)
         class_counts = Counter(item.class_name for item in instances)
@@ -282,6 +322,13 @@ class ToolSet:
         return {"work_order_id": work_order_id, "status": "not_found"}
 
     def dismiss_instance(self, instance_id: int, reason: str) -> dict[str, object]:
+        if self._instance(instance_id) is None:
+            return {"error": "instance not found"}
+        if any(instance_id in item.get("instance_ids", []) for item in self.context.work_orders):
+            return {"error": "instance already supports a work order; rerun the review to revise its evidence"}
+        existing = next((item for item in self.context.dismissals if item["instance_id"] == instance_id), None)
+        if existing is not None:
+            return existing
         value: dict[str, object] = {
             "instance_id": instance_id,
             "reason": reason,

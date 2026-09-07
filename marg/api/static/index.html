@@ -1,59 +1,581 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MargAI Survey Dashboard</title>
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
-  <style>
-    :root { color-scheme: dark; --bg:#10151b; --panel:#19222c; --line:#30404d; --muted:#9fb0bd; --accent:#63d7c9; }
-    * { box-sizing:border-box; } body { margin:0; font:14px system-ui,sans-serif; background:var(--bg); color:#edf5f7; }
-    header { padding:14px 20px; border-bottom:1px solid var(--line); display:flex; gap:18px; align-items:center; }
-    header h1 { font-size:20px; margin:0; letter-spacing:.03em; } select,button { border:1px solid var(--line); border-radius:6px; background:#111920; color:inherit; padding:8px 10px; }
-    button { cursor:pointer; } button:hover { border-color:var(--accent); } .warning { color:#ffd166; border:1px solid #806b2f; padding:4px 8px; border-radius:999px; font-size:12px; }
-    .stats { display:flex; gap:10px; flex-wrap:wrap; padding:12px 20px; border-bottom:1px solid var(--line); } .stat { background:var(--panel); padding:8px 12px; border-radius:6px; min-width:100px; } .stat b { display:block; font-size:18px; } .stat span { color:var(--muted); font-size:11px; }
-    main { display:grid; grid-template-columns:45% 55%; min-height:calc(100vh - 120px); } #map { min-height:700px; } .side { border-left:1px solid var(--line); padding:15px; overflow:auto; } .tabs { display:flex; gap:6px; margin-bottom:12px; } .tab.active { background:var(--accent); color:#071513; }
-    .tabpane { display:none; } .tabpane.active { display:block; } table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding:8px 5px; border-bottom:1px solid var(--line); vertical-align:top; } th { color:var(--muted); font-weight:500; }
-    .trace { border-left:2px solid var(--accent); padding-left:12px; margin:10px 0; } .trace small,.muted { color:var(--muted); } pre { white-space:pre-wrap; overflow-wrap:anywhere; margin:4px 0; color:#c4d3da; }
-    .order { background:var(--panel); padding:12px; margin:10px 0; border-radius:8px; border-left:4px solid #e05252; } .order.low { border-left-color:#53c878; } .order.pending { box-shadow:0 0 0 1px #ffd166 inset; } .badge { color:#ffd166; font-size:12px; }
-    .crop { width:90px; max-height:70px; object-fit:cover; border-radius:4px; } .chips { display:flex; gap:8px; flex-wrap:wrap; align-items:center; } .chip { display:inline-flex; gap:5px; align-items:center; background:#111920; border:1px solid var(--line); padding:4px; border-radius:5px; } .order a { color:var(--accent); } .empty { color:var(--muted); padding:20px 0; }
-    .upload { padding:12px 20px; border-bottom:1px solid var(--line); display:flex; gap:8px; align-items:center; flex-wrap:wrap; } .upload input { max-width:220px; }
-  </style>
-</head>
-<body>
-  <header><h1>MargAI / road survey</h1><select id="survey"></select><button id="run">Run agent (mock)</button></header>
-  <form class="upload" id="upload"><b>Upload survey</b><input name="name" placeholder="survey name"><input name="video" type="file" accept="video/*" required><input name="gpx" type="file" accept=".gpx,.srt"><button>Submit</button><span id="uploadStatus" class="muted"></span></form>
-  <section class="stats" id="stats"></section>
-  <main><div id="map"></div><section class="side">
-    <nav class="tabs"><button class="tab active" data-tab="instances">Instances</button><button class="tab" data-tab="trace">Agent trace</button><button class="tab" data-tab="orders">Work orders</button></nav>
-    <div id="instances" class="tabpane active"></div><div id="trace" class="tabpane"></div><div id="orders" class="tabpane"></div>
-  </section></main>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <script>
-    const $ = id => document.getElementById(id); let current = null; let currentId = null; let map = L.map('map').setView([20,78],5); let markers = L.layerGroup().addTo(map);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
-    const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
-    async function get(path, options) { const response = await fetch(path, options); if (!response.ok) throw new Error(await response.text()); return response.json(); }
-    function stat(label,value) { return `<div class="stat"><b>${esc(value)}</b><span>${label}</span></div>`; }
-    function severityColor(s) { return s >= 4 ? '#e05252' : s === 3 ? '#ffd166' : '#53c878'; }
-    async function loadHealth() { const health = await get('/api/health'); if (health.read_only) { document.querySelectorAll('#upload input,#upload button').forEach(control => control.disabled = true); $('uploadStatus').textContent = 'Uploads are disabled on the public demo; run locally or on AWS'; } }
-    async function loadSurveys() { const surveys = await get('/api/surveys'); $('survey').innerHTML = surveys.map(s => `<option value="${esc(s.id)}">${esc(s.id)}${s.status&&s.status!=='done'?` (${esc(s.status)})`:''}</option>`).join(''); const ready=surveys.find(s=>s.status==='done')||surveys[0]; if (ready&&ready.status==='done') await loadSurvey(ready.id); else if (ready) $('stats').innerHTML=stat('status',ready.status); }
-    async function loadSurvey(id) {
-      currentId = id; current = await get(`/api/surveys/${encodeURIComponent(id)}`); $('survey').value=id; markers.clearLayers();
-      const points=[]; current.instances.forEach(inst => { points.push([inst.lat,inst.lon]); const marker=L.circleMarker([inst.lat,inst.lon],{radius:8,fillColor:severityColor(inst.severity),color:'#fff',weight:1,fillOpacity:.9}); const evidence=inst.evidence_path || ''; marker.bindPopup(`<b>${esc(inst.class_name)}</b><br>confidence ${Number(inst.fused_conf).toFixed(2)}<br>severity ${inst.severity}<br>area ${Number(inst.area_m2).toFixed(2)} m²${evidence ? `<br><img class="crop" src="/api/surveys/${encodeURIComponent(id)}/evidence/${encodeURIComponent(evidence.split('/').pop())}">` : ''}`); markers.addLayer(marker); }); if(points.length) map.fitBounds(points,{padding:[25,25]});
-      $('stats').innerHTML = stat('frames',current.frames)+stat('keyframes',current.keyframes)+stat('detections',Object.values(current.detections).reduce((a,b)=>a+b,0))+stat('instances',current.instances.length)+stat('runtime',`${Number(current.metrics.runtime_s||0).toFixed(1)}s`)+(current.geo_source==='synthetic'?'<span class="warning">synthetic GPS</span>':stat('geo',current.geo_source));
-    renderInstances(id); renderTrace(id); renderOrders(id);
-    }
-    function renderInstances(id) { $('instances').innerHTML=`<table><thead><tr><th>Class</th><th>Conf.</th><th>Severity</th><th>Area</th><th>GPS</th><th>Evidence</th></tr></thead><tbody>${current.instances.map(i=>{ const evidence=i.evidence_path||''; return `<tr><td>${esc(i.class_name)}</td><td>${Number(i.fused_conf).toFixed(2)}</td><td>${i.severity}</td><td>${Number(i.area_m2).toFixed(2)} m²</td><td>${Number(i.lat).toFixed(5)}, ${Number(i.lon).toFixed(5)}</td><td>${evidence?`<img class="crop" src="/api/surveys/${encodeURIComponent(id)}/evidence/${encodeURIComponent(evidence.split('/').pop())}">`:''}</td></tr>`; }).join('')}</tbody></table>`; }
-    function traceOutput(id, output) { const crop=output&&typeof output.crop_path==='string'?`<br><img class="crop" src="/api/surveys/${encodeURIComponent(id)}/agent_crops/${encodeURIComponent(output.crop_path)}">`:''; return `<pre>out: ${esc(JSON.stringify(output))}</pre>${crop}`; }
-    async function renderTrace(id) { try { const trace=await get(`/api/surveys/${encodeURIComponent(id)}/trace`); $('trace').innerHTML=trace.length?trace.map(e=>`<div class="trace"><b>${esc(e.tool)}</b> <small>step ${e.step} · ${Number(e.latency_ms).toFixed(1)} ms</small><pre>args: ${esc(JSON.stringify(e.input))}</pre>${traceOutput(id,e.output)}</div>`).join(''):'<div class="empty">No agent trace yet.</div>'; } catch { $('trace').innerHTML='<div class="empty">No agent trace yet.</div>'; } }
-    function orderInstances(id, order) { const instances=Array.isArray(order.instances)?order.instances:[]; return instances.length?`<div class="chips">${instances.map(item=>{ const evidence=typeof item.evidence==='string'?`<img class="crop" src="/api/surveys/${encodeURIComponent(id)}/evidence/${encodeURIComponent(item.evidence)}">`:''; const gps=`https://www.openstreetmap.org/?mlat=${encodeURIComponent(item.lat)}&mlon=${encodeURIComponent(item.lon)}#map=19/${encodeURIComponent(item.lat)}/${encodeURIComponent(item.lon)}`; return `<span class="chip">${esc(item.class)} · sev ${esc(item.severity)} ${evidence}<a href="${gps}" target="_blank" rel="noopener">GPS</a></span>`; }).join('')}</div>`:''; }
-    async function renderOrders(id) { try { const agent=await get(`/api/surveys/${encodeURIComponent(id)}/agent`); const orders=agent.work_orders||[]; $('orders').innerHTML=orders.length?orders.map(o=>`<article class="order ${esc(o.priority)} ${o.status==='pending_approval'?'pending':''}"><b>${esc(o.title||o.summary)}</b><br><span class="muted">${esc(o.priority)} priority · ${esc(o.status)}</span> ${o.status==='pending_approval'?'<span class="badge">awaiting approval</span>':''}<p>${esc(o.reason||o.summary)}</p>${orderInstances(id,o)}${o.status==='pending_approval'?`<br><button onclick="decide('${esc(id)}','${esc(o.work_order_id)}','approve')">Approve</button> <button onclick="decide('${esc(id)}','${esc(o.work_order_id)}','reject')">Reject</button>`:''}</article>`).join(''):'<div class="empty">No work orders.</div>'; } catch { $('orders').innerHTML='<div class="empty">No agent result yet.</div>'; } }
-    async function decide(id,wo,decision) { await get(`/api/surveys/${encodeURIComponent(id)}/work_orders/${encodeURIComponent(wo)}/decision`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({decision,note:'Dashboard decision'})}); await renderOrders(id); }
-    $('survey').onchange=e=>loadSurvey(e.target.value); $('run').onclick=async()=>{ await get(`/api/surveys/${encodeURIComponent(currentId)}/run_agent?llm=mock`,{method:'POST'}); const started=Date.now(); const poll=setInterval(async()=>{ try { await get(`/api/surveys/${encodeURIComponent(currentId)}/agent`); clearInterval(poll); await renderTrace(currentId); await renderOrders(currentId); } catch {} if(Date.now()-started>60000) clearInterval(poll); },2000); };
-    $('upload').onsubmit=async event=>{ event.preventDefault(); const form=new FormData(event.target); $('uploadStatus').textContent='Uploading…'; try { const response=await fetch('/api/surveys/upload',{method:'POST',body:form}); if(!response.ok) throw new Error(await response.text()); const value=await response.json(); $('uploadStatus').textContent=`${value.survey_id}: queued`; await loadSurveys(); const poll=setInterval(async()=>{ try { const status=await get(`/api/surveys/${encodeURIComponent(value.survey_id)}/status`); $('uploadStatus').textContent=`${value.survey_id}: ${status.status}`; if(status.status==='done'||status.status==='failed'){clearInterval(poll); await loadSurveys();} } catch {} },5000); } catch(error) { $('uploadStatus').textContent=String(error); } };
-    document.querySelectorAll('.tab').forEach(button=>button.onclick=()=>{document.querySelectorAll('.tab,.tabpane').forEach(el=>el.classList.remove('active'));button.classList.add('active');$(button.dataset.tab).classList.add('active');});
-    Promise.all([loadHealth(), loadSurveys()]).catch(error=>{$('stats').textContent=error;});
-  </script>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="theme-color" content="#10171c" />
+    <meta
+      name="description"
+      content="Review road survey evidence, inspect uncertain detections, and approve repair work with MargAI."
+    />
+    <title>MargAI — Survey review</title>
+    <link rel="icon" href="/static/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/static/vendor/leaflet.css" />
+    <link rel="stylesheet" href="/static/app.css" />
+    <script src="/static/vendor/leaflet.js" defer></script>
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <!-- MargAI survey workbench. Operate mode: preserve the existing dark slate and teal identity; foreground recorded evidence and explicit human decisions. The first viewport joins one selected frame with a scannable defect list. Location, estimates, and provider provenance stay visible. No live-inference claim without runtime evidence. -->
+    <a class="skip-link" href="#main">Skip to survey review</a>
+    <div class="shell">
+      <aside class="sidebar" id="sidebar" aria-label="Workspace navigation">
+        <a class="brand" href="/" aria-label="MargAI home"
+          ><img src="/static/mark.svg" width="34" height="34" alt="" /><span
+            >Marg<span class="brand-ai">AI</span
+            ><small>Road intelligence</small></span
+          ></a
+        >
+        <nav class="primary-nav" aria-label="Workspace">
+          <button
+            class="nav-item active"
+            data-view="inspection"
+            aria-current="page"
+          >
+            <svg><use href="#i-grid" /></svg>Survey review
+          </button>
+          <button class="nav-item" data-view="orders">
+            <svg><use href="#i-check" /></svg>Work orders<span
+              id="navOrderCount"
+              class="nav-count"
+              >0</span
+            >
+          </button>
+          <button class="nav-item" data-view="activity">
+            <svg><use href="#i-activity" /></svg>Review activity
+          </button>
+        </nav>
+        <div class="survey-list-heading">
+          <h2>Surveys</h2>
+          <button class="icon-button" id="refresh" aria-label="Refresh surveys">
+            <svg><use href="#i-refresh" /></svg>
+          </button>
+        </div>
+        <div id="surveyList" class="survey-list" aria-label="Choose a survey">
+          <p class="small muted">Loading surveys…</p>
+        </div>
+        <div class="sidebar-footer">
+          <span class="connection-dot"></span
+          ><span id="storageLabel">Connecting to workspace</span
+          ><button
+            id="helpButton"
+            class="icon-button"
+            aria-label="About this workspace"
+          >
+            <svg><use href="#i-info" /></svg>
+          </button>
+        </div>
+      </aside>
+      <button
+        id="navBackdrop"
+        class="nav-backdrop"
+        aria-label="Close navigation"
+        hidden
+      ></button>
+      <div class="workspace">
+        <header class="topbar">
+          <button
+            id="menuButton"
+            class="icon-button menu-button"
+            aria-label="Toggle navigation"
+            aria-expanded="false"
+            aria-controls="sidebar"
+          >
+            <svg><use href="#i-menu" /></svg>
+          </button>
+          <div class="breadcrumb">
+            Workspace<span>/</span><b id="breadcrumbView">Survey review</b>
+          </div>
+          <div class="topbar-actions">
+            <span class="mode-badge" id="modeBadge"
+              ><span></span>Local review</span
+            ><button id="accessButton" class="text-button" hidden>
+              Unlock workspace
+            </button>
+          </div>
+        </header>
+        <main id="main" tabindex="-1">
+          <div class="page-heading">
+            <div>
+              <h1 id="pageTitle">Survey review</h1>
+              <p id="pageDescription">
+                From road evidence to the right repair decision.
+              </p>
+            </div>
+            <button id="newSurvey" class="button primary" disabled>
+              <svg><use href="#i-plus" /></svg>New survey
+            </button>
+          </div>
+          <div id="notice" class="notice" role="status" hidden></div>
+          <section id="jobPanel" class="job-panel" aria-live="polite" hidden>
+            <span class="job-indicator"></span>
+            <div>
+              <strong id="jobTitle">Review queued</strong>
+              <p id="jobDetail">Your existing evidence remains available.</p>
+            </div>
+            <button
+              id="jobDismiss"
+              class="icon-button"
+              aria-label="Dismiss job status"
+              hidden
+            >
+              <svg><use href="#i-close" /></svg>
+            </button>
+          </section>
+          <section id="emptyWorkspace" class="empty-workspace" hidden>
+            <svg><use href="#i-road" /></svg>
+            <h2>Your next survey starts here</h2>
+            <p>
+              Add a dashcam video to find, inspect, and review road damage. A
+              GPS track is optional.
+            </p>
+            <button id="emptyUpload" class="button primary">
+              Upload a survey
+            </button>
+          </section>
+          <div id="surveyWorkspace" hidden>
+            <section class="survey-heading">
+              <div>
+                <div class="survey-name-row">
+                  <h2 id="surveyName">Survey</h2>
+                  <span id="surveyStatus" class="status-badge"
+                    >Ready for review</span
+                  >
+                </div>
+                <p id="surveyMeta" class="small muted"></p>
+              </div>
+              <button id="exportButton" class="button quiet">
+                <svg><use href="#i-download" /></svg>Export report
+              </button>
+            </section>
+            <section class="metrics" aria-label="Survey summary">
+              <div>
+                <span>Unique defects</span><strong id="metricDefects">—</strong
+                ><small id="metricDetections"></small>
+              </div>
+              <div>
+                <span>Needs close review</span
+                ><strong id="metricUncertain">—</strong
+                ><small>Confidence below 55%</small>
+              </div>
+              <div>
+                <span>Awaiting approval</span
+                ><strong id="metricOrders">—</strong
+                ><small>Human decision required</small>
+              </div>
+              <div>
+                <span>Processing time</span><strong id="metricRuntime">—</strong
+                ><small id="metricFrames"></small>
+              </div>
+            </section>
+            <section id="inspectionView" class="view-panel">
+              <div class="inspection-grid">
+                <section
+                  class="evidence-panel"
+                  aria-label="Selected defect evidence"
+                >
+                  <div class="panel-toolbar">
+                    <h3 id="evidenceTitle">Survey evidence</h3>
+                    <div
+                      class="segmented"
+                      role="group"
+                      aria-label="Evidence view"
+                    >
+                      <button
+                        id="showEvidence"
+                        class="active"
+                        aria-pressed="true"
+                      >
+                        <svg><use href="#i-image" /></svg>Evidence</button
+                      ><button id="showMap" aria-pressed="false">
+                        <svg><use href="#i-pin" /></svg>Map
+                      </button>
+                    </div>
+                  </div>
+                  <div id="evidenceStage" class="evidence-stage">
+                    <img
+                      id="evidenceImage"
+                      alt="Selected road damage evidence"
+                      hidden
+                    />
+                    <div id="imageEmpty" class="image-empty">
+                      Select a defect to inspect its evidence.
+                    </div>
+                    <button
+                      id="expandEvidence"
+                      class="image-expand"
+                      aria-label="Expand evidence image"
+                      hidden
+                    >
+                      <svg><use href="#i-expand" /></svg></button
+                    ><span id="imageBadge" class="image-badge" hidden
+                      >Evidence frame</span
+                    >
+                  </div>
+                  <div id="mapStage" class="map-stage" hidden>
+                    <div id="map" aria-label="Survey defect locations"></div>
+                    <div id="mapError" class="map-error" hidden>
+                      Basemap unavailable. Defect locations are still shown.
+                    </div>
+                  </div>
+                  <div class="evidence-caption">
+                    <span id="evidenceCaption">Recorded survey evidence</span
+                    ><span id="geoWarning" class="geo-warning"></span>
+                  </div>
+                  <div id="selectedDetails" class="selected-details"></div>
+                  <div class="frame-strip-heading">
+                    <h4>Survey keyframes</h4>
+                    <span id="frameCount" class="small muted"></span>
+                  </div>
+                  <div
+                    id="frameStrip"
+                    class="frame-strip"
+                    aria-label="Survey keyframes"
+                  ></div>
+                </section>
+                <section class="defects-panel" aria-label="Detected damage">
+                  <div class="panel-toolbar">
+                    <h3>
+                      Detected damage
+                      <span id="defectCount" class="count">0</span>
+                    </h3>
+                    <select id="sortDefects" aria-label="Sort defects">
+                      <option value="severity">Severity first</option>
+                      <option value="confidence">Lowest confidence</option>
+                      <option value="id">Detection order</option>
+                    </select>
+                  </div>
+                  <div class="filter-row">
+                    <label class="search-field"
+                      ><svg><use href="#i-search" /></svg
+                      ><input
+                        id="searchDefects"
+                        type="search"
+                        placeholder="Find a defect…"
+                        aria-label="Search defects" /></label
+                    ><button
+                      id="uncertainFilter"
+                      class="filter-button"
+                      aria-pressed="false"
+                    >
+                      Needs review
+                    </button>
+                  </div>
+                  <div id="defectList" class="defect-list"></div>
+                  <div class="review-action">
+                    <div>
+                      <strong>Inspect. Verify. Decide.</strong>
+                      <p id="reviewDescription">
+                        Run a deterministic review to inspect uncertainty and
+                        prepare work orders.
+                      </p>
+                    </div>
+                    <div class="run-controls">
+                      <select id="reviewMode" aria-label="Review mode">
+                        <option value="mock">
+                          Deterministic review
+                        </option></select
+                      ><button id="runReview" class="button primary" disabled>
+                        <svg><use href="#i-play" /></svg>Run review
+                      </button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </section>
+            <section id="ordersView" class="view-panel" hidden>
+              <div class="section-heading">
+                <div>
+                  <h3>Work orders</h3>
+                  <p>
+                    Review the evidence before recording your decision. Approval
+                    does not dispatch a repair.
+                  </p>
+                </div>
+                <select id="orderFilter" aria-label="Filter work orders">
+                  <option value="all">All work orders</option>
+                  <option value="pending_approval">Awaiting approval</option>
+                  <option value="approved">Approved</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              <div id="orderList" class="order-list"></div>
+            </section>
+            <section id="activityView" class="view-panel" hidden>
+              <div class="section-heading">
+                <div>
+                  <h3>Review activity</h3>
+                  <p id="traceProvenance">
+                    Every inspection, policy check, and draft in one record.
+                  </p>
+                </div>
+                <button id="traceExport" class="button quiet">
+                  <svg><use href="#i-download" /></svg>Export activity
+                </button>
+              </div>
+              <div id="agentSummary" class="agent-summary"></div>
+              <ol id="traceList" class="timeline"></ol>
+            </section>
+            <footer class="workspace-footer">
+              <span id="provenanceLabel">Recorded evidence</span
+              ><span
+                >Area and severity are estimates. Field verification is
+                required.</span
+              >
+            </footer>
+          </div>
+        </main>
+      </div>
+    </div>
+    <dialog
+      id="uploadDialog"
+      class="dialog upload-dialog"
+      aria-labelledby="uploadTitle"
+    >
+      <form id="uploadForm">
+        <div class="dialog-heading">
+          <h2 id="uploadTitle">New road survey</h2>
+          <button
+            type="button"
+            data-close="uploadDialog"
+            class="icon-button"
+            aria-label="Close upload"
+          >
+            <svg><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <p class="muted">
+          Upload a dashcam video. MargAI extracts evidence and groups repeated
+          damage into unique defects.
+        </p>
+        <label class="field"
+          >Survey name <span class="optional">Optional</span
+          ><input
+            name="name"
+            maxlength="120"
+            placeholder="e.g. Ring Road, morning survey" /></label
+        ><label class="file-drop" id="videoDrop"
+          ><svg><use href="#i-upload" /></svg
+          ><strong id="videoLabel">Choose a dashcam video</strong
+          ><span id="videoHint">MP4, MOV, AVI, MKV or WebM</span
+          ><input
+            id="videoFile"
+            name="video"
+            type="file"
+            accept=".mp4,.mov,.avi,.mkv,.webm,.ogv,.mpeg,.mpg"
+            required /></label
+        ><label class="field"
+          >GPS track <span class="optional">Optional · GPX or SRT</span
+          ><input id="gpxFile" name="gpx" type="file" accept=".gpx,.srt"
+        /></label>
+        <p class="form-note">
+          Without a GPS track, locations are synthetic and will be labelled
+          throughout the workspace.
+        </p>
+        <div id="uploadError" class="form-error" role="alert" hidden></div>
+        <div class="dialog-footer">
+          <button type="button" data-close="uploadDialog" class="button quiet">
+            Cancel</button
+          ><button id="submitUpload" class="button primary" type="submit">
+            Process survey<svg><use href="#i-arrow" /></svg>
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="decisionDialog" class="dialog" aria-labelledby="decisionTitle">
+      <form id="decisionForm">
+        <div class="dialog-heading">
+          <h2 id="decisionTitle">Approve work order</h2>
+          <button
+            type="button"
+            data-close="decisionDialog"
+            class="icon-button"
+            aria-label="Close decision"
+          >
+            <svg><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <p id="decisionSummary"></p>
+        <p class="form-note">
+          This records your review decision. Nothing is sent to a municipality
+          or contractor.
+        </p>
+        <label class="field"
+          >Review note <span class="optional">Optional</span
+          ><textarea
+            id="decisionNote"
+            maxlength="2000"
+            rows="3"
+            placeholder="Record what you verified or why this needs more work."
+          ></textarea>
+        </label>
+        <div id="decisionError" class="form-error" role="alert" hidden></div>
+        <div class="dialog-footer">
+          <button
+            type="button"
+            data-close="decisionDialog"
+            class="button quiet"
+          >
+            Cancel</button
+          ><button id="submitDecision" type="submit" class="button primary">
+            Record approval
+          </button>
+        </div>
+      </form>
+    </dialog>
+    <dialog
+      id="imageDialog"
+      class="dialog image-dialog"
+      aria-labelledby="imageDialogTitle"
+    >
+      <div class="dialog-heading">
+        <h2 id="imageDialogTitle">Road evidence</h2>
+        <button
+          data-close="imageDialog"
+          class="icon-button"
+          aria-label="Close evidence"
+        >
+          <svg><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <img id="fullImage" alt="Expanded road survey evidence" hidden />
+      <p class="small muted" id="fullImageCaption"></p>
+    </dialog>
+    <dialog id="helpDialog" class="dialog" aria-labelledby="helpTitle">
+      <div class="dialog-heading">
+        <h2 id="helpTitle">Your review workspace</h2>
+        <button
+          data-close="helpDialog"
+          class="icon-button"
+          aria-label="Close workspace details"
+        >
+          <svg><use href="#i-close" /></svg>
+        </button>
+      </div>
+      <div class="help-content">
+        <h3>Evidence comes first</h3>
+        <p>
+          OpenCV finds and groups road damage. Confidence, estimated area, and
+          evidence frames help you verify each observation.
+        </p>
+        <h3>Review without Bedrock</h3>
+        <p>
+          Deterministic review follows fixed inspection rules. It can inspect
+          uncertain regions and prepare work orders without a language model.
+          Bedrock is offered only when explicitly enabled.
+        </p>
+        <h3>You make the final decision</h3>
+        <p>
+          Work orders require a human review. Decisions are saved in this
+          workspace; they do not file or dispatch repairs.
+        </p>
+        <h3>Location and privacy</h3>
+        <p>
+          Synthetic GPS is labelled. Sensitive regions detected by the privacy
+          models are masked in newly processed evidence; automated detection can
+          miss faces and plates. Review images before sharing.
+        </p>
+      </div>
+    </dialog>
+    <dialog id="accessDialog" class="dialog" aria-labelledby="accessTitle">
+      <form id="accessForm">
+        <div class="dialog-heading">
+          <h2 id="accessTitle">Unlock workspace</h2>
+          <button
+            type="button"
+            data-close="accessDialog"
+            class="icon-button"
+            aria-label="Close access dialog"
+          >
+            <svg><use href="#i-close" /></svg>
+          </button>
+        </div>
+        <p class="muted">
+          Enter the workspace access token provided by your operator.
+        </p>
+        <label class="field"
+          >Access token<input
+            id="accessToken"
+            type="password"
+            required
+            autocomplete="off"
+            spellcheck="false"
+        /></label>
+        <div id="accessError" class="form-error" role="alert" hidden></div>
+        <div class="dialog-footer">
+          <button class="button primary" type="submit">Unlock workspace</button>
+        </div>
+      </form>
+    </dialog>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <svg
+      class="svg-symbols"
+      aria-hidden="true"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <defs>
+        <symbol id="i-grid" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="7" height="7" rx="1" />
+          <rect x="14" y="3" width="7" height="7" rx="1" />
+          <rect x="3" y="14" width="7" height="7" rx="1" />
+          <rect x="14" y="14" width="7" height="7" rx="1" />
+        </symbol>
+        <symbol id="i-check" viewBox="0 0 24 24">
+          <path
+            d="M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-9M8 11l4 4L22 3"
+          />
+        </symbol>
+        <symbol id="i-activity" viewBox="0 0 24 24">
+          <path d="M2 12h5l3-8 4 16 3-8h5" />
+        </symbol>
+        <symbol id="i-road" viewBox="0 0 24 24">
+          <path d="m7 3-4 18M17 3l4 18M12 3v3m0 4v4m0 4v3" />
+        </symbol>
+        <symbol id="i-refresh" viewBox="0 0 24 24">
+          <path d="M20 7a9 9 0 1 0 1 8M20 2v5h-5" />
+        </symbol>
+        <symbol id="i-info" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 11v6m0-10v1" />
+        </symbol>
+        <symbol id="i-menu" viewBox="0 0 24 24">
+          <path d="M4 6h16M4 12h16M4 18h16" />
+        </symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24">
+          <path d="M12 4v16M4 12h16" />
+        </symbol>
+        <symbol id="i-close" viewBox="0 0 24 24">
+          <path d="m6 6 12 12M6 18 18 6" />
+        </symbol>
+        <symbol id="i-download" viewBox="0 0 24 24">
+          <path d="M12 3v12m-5-5 5 5 5-5M4 15v6h16v-6" />
+        </symbol>
+        <symbol id="i-upload" viewBox="0 0 24 24">
+          <path d="M12 16V3m-5 5 5-5 5 5M4 15v6h16v-6" />
+        </symbol>
+        <symbol id="i-image" viewBox="0 0 24 24">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <circle cx="8" cy="8" r="1" />
+          <path d="m3 17 6-6 4 4 3-3 5 5" />
+        </symbol>
+        <symbol id="i-pin" viewBox="0 0 24 24">
+          <path d="M19 10c0 5-7 11-7 11S5 15 5 10a7 7 0 1 1 14 0Z" />
+          <circle cx="12" cy="10" r="2" />
+        </symbol>
+        <symbol id="i-search" viewBox="0 0 24 24">
+          <circle cx="10" cy="10" r="6" />
+          <path d="m15 15 6 6" />
+        </symbol>
+        <symbol id="i-play" viewBox="0 0 24 24">
+          <path d="m8 4 12 8-12 8Z" />
+        </symbol>
+        <symbol id="i-arrow" viewBox="0 0 24 24">
+          <path d="M4 12h16m-6-6 6 6-6 6" />
+        </symbol>
+        <symbol id="i-expand" viewBox="0 0 24 24">
+          <path d="M9 3H3v6m12-6h6v6M3 15v6h6m6 0h6v-6" />
+        </symbol>
+      </defs>
+    </svg>
+  </body>
 </html>

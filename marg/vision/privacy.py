@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from itertools import product
 from pathlib import Path
 
@@ -13,45 +14,52 @@ _FACE_MODEL = _ROOT / "models" / "face_detection_yunet_2023mar.onnx"
 _PLATE_MODEL = _ROOT / "models" / "license_plate_detection_lpd_yunet_2023mar.onnx"
 
 
+class PrivacyDetectionError(RuntimeError):
+    """Privacy checks could not complete; callers must not publish the image."""
+
+
 class SensitiveRegionDetector:
     def __init__(self) -> None:
         self._face = None
         self._plate = None
-        self._warned: set[str] = set()
         self._priors = self._make_priors()
+        self._lock = threading.RLock()
+
+    def ensure_ready(self) -> None:
+        """Require both privacy models before producing any shareable artifacts."""
+        with self._lock:
+            for kind, path in (("face", _FACE_MODEL), ("license-plate", _PLATE_MODEL)):
+                if not path.is_file():
+                    raise PrivacyDetectionError(f"Privacy {kind} model is missing; redacted export is unavailable")
+            try:
+                if self._face is None:
+                    self._face = cv2.FaceDetectorYN.create(str(_FACE_MODEL), "", (320, 320), 0.6, 0.3, 5000)
+                if self._plate is None:
+                    self._plate = cv2.dnn.readNet(str(_PLATE_MODEL))
+            except cv2.error as error:
+                raise PrivacyDetectionError("Privacy models could not load; redacted export is unavailable") from error
 
     def detect(self, image: np.ndarray) -> list[tuple[int, int, int, int]]:
         if image is None or image.size == 0:
-            return []
-        return _merge_overlapping(self._detect_faces(image) + self._detect_plates(image))
+            raise PrivacyDetectionError("Cannot check privacy on an empty image")
+        # OpenCV DNN networks have mutable input state and are shared by API jobs.
+        with self._lock:
+            self.ensure_ready()
+            try:
+                return _merge_overlapping(self._detect_faces(image) + self._detect_plates(image))
+            except (cv2.error, ValueError, TypeError, IndexError) as error:
+                LOGGER.warning("Privacy inference failed; refusing unverified export", exc_info=True)
+                raise PrivacyDetectionError("Privacy detection failed; redacted export is unavailable") from error
 
     def _detect_faces(self, image: np.ndarray) -> list[tuple[int, int, int, int]]:
-        if not _FACE_MODEL.is_file():
-            self._warn_missing("face", _FACE_MODEL)
-            return []
-        try:
-            if self._face is None:
-                self._face = cv2.FaceDetectorYN.create(str(_FACE_MODEL), "", (320, 320), 0.6, 0.3, 5000)
-            height, width = image.shape[:2]
-            self._face.setInputSize((width, height))
-            _, detections = self._face.detect(image)
-        except cv2.error:
-            LOGGER.warning("Unable to run YuNet face detector", exc_info=True)
-            return []
+        height, width = image.shape[:2]
+        self._face.setInputSize((width, height))
+        _, detections = self._face.detect(image)
         if detections is None:
             return []
         return [_clip_box(row[:4], width, height) for row in detections]
 
     def _detect_plates(self, image: np.ndarray) -> list[tuple[int, int, int, int]]:
-        if not _PLATE_MODEL.is_file():
-            self._warn_missing("plate", _PLATE_MODEL)
-            return []
-        try:
-            if self._plate is None:
-                self._plate = cv2.dnn.readNet(str(_PLATE_MODEL))
-        except cv2.error:
-            LOGGER.warning("Unable to run YuNet license-plate detector", exc_info=True)
-            return []
         height, width = image.shape[:2]
         windows = [(0, 0, width, height)]
         lower_y = round(height * 0.4)
@@ -68,12 +76,10 @@ class SensitiveRegionDetector:
                 (320, 240),
                 interpolation=cv2.INTER_AREA,
             )
-            try:
-                self._plate.setInput(cv2.dnn.blobFromImage(native))
-                loc, conf, iou = self._plate.forward(["loc", "conf", "iou"])
-            except cv2.error:
-                LOGGER.warning("Unable to run YuNet license-plate detector", exc_info=True)
-                continue
+            self._plate.setInput(cv2.dnn.blobFromImage(native))
+            loc, conf, iou = self._plate.forward(["loc", "conf", "iou"])
+            if not all(np.isfinite(value).all() for value in (loc, conf, iou)):
+                raise ValueError("Non-finite privacy detector output")
             scores = np.sqrt(
                 np.clip(conf[:, 1], 0.0, 1.0) * np.clip(iou[:, 0], 0.0, 1.0)
             )
@@ -143,13 +149,20 @@ class SensitiveRegionDetector:
                     priors.append([(column + 0.5) * steps[level] / 320, (row + 0.5) * steps[level] / 240, min_size / 320, min_size / 240])
         return np.asarray(priors, dtype=np.float32)
 
-    def _warn_missing(self, kind: str, path: Path) -> None:
-        if kind not in self._warned:
-            LOGGER.warning("Privacy %s model is missing: %s", kind, path)
-            self._warned.add(kind)
-
-
 _DETECTOR = SensitiveRegionDetector()
+
+
+def ensure_privacy_ready() -> None:
+    _DETECTOR.ensure_ready()
+
+
+def privacy_status() -> dict[str, object]:
+    """Model loading readiness, not a claim that every face or plate is detected."""
+    try:
+        ensure_privacy_ready()
+    except PrivacyDetectionError as error:
+        return {"available": False, "detail": str(error)}
+    return {"available": True, "detail": "Face and plate models loaded; automated redaction requires review"}
 
 
 def detect_sensitive_regions(img: np.ndarray) -> list[tuple[int, int, int, int]]:
@@ -161,8 +174,12 @@ def redact(
     boxes: list[tuple[int, int, int, int]],
     protect: list[tuple[float, float, float, float]] | None = None,
 ) -> tuple[np.ndarray, int]:
+    """Pixelate sensitive boxes, including any overlap with damage detections.
+
+    ``protect`` remains accepted for older callers, but cannot exempt sensitive
+    pixels. Pixels outside the sensitive boxes are always preserved.
+    """
     output = img.copy()
-    protected = protect or []
     redacted = 0
     for box in boxes:
         x0, y0, x1, y1 = _expanded_bounds(box, output.shape[1], output.shape[0])
@@ -187,10 +204,6 @@ def redact(
         if bx1 <= bx0 or by1 <= by0:
             continue
         mask[by0 - y0 : by1 - y0, bx0 - x0 : bx1 - x0] = True
-        for px, py, pw, ph in protected:
-            px0, py0, px1, py1 = max(x0, round(px)), max(y0, round(py)), min(x1, round(px + pw)), min(y1, round(py + ph))
-            if px1 > px0 and py1 > py0:
-                mask[py0 - y0 : py1 - y0, px0 - x0 : px1 - x0] = False
         if np.any(mask):
             region[mask] = pixelated[mask]
             redacted += 1

@@ -24,3 +24,6 @@ testpaths = ["tests"]
 
 [tool.setuptools.packages.find]
 include = ["marg*", "eval*"]
+
+[tool.setuptools.package-data]
+"marg.api" = ["static/*", "static/vendor/*", "static/vendor/images/*", "static/vendor/fonts/*"]
