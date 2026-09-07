@@ -35,7 +35,7 @@ if ! docker buildx build --platform "$PLATFORM" --push -t "$IMAGE" "$ROOT"; then
   fi
 fi
 
-VPC_ID="$(aws ec2 describe-vpcs --region "$REGION" --filters Name=default,Values=true --query 'Vpcs[0].VpcId' --output text)"
+VPC_ID="$(aws ec2 describe-vpcs --region "$REGION" --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text)"
 SUBNETS="$(aws ec2 describe-subnets --region "$REGION" --filters Name=vpc-id,Values="$VPC_ID" Name=default-for-az,Values=true --query 'Subnets[].SubnetId' --output text | tr '\t' ',')"
 aws cloudformation deploy \
   --region "$REGION" \

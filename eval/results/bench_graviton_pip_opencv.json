@@ -1,0 +1,73 @@
+{
+  "label": "graviton_pip_opencv",
+  "environment": {
+    "platform_machine": "aarch64",
+    "cpu_model": "aarch64",
+    "cpu_count": 2,
+    "opencv_version": "5.0.0",
+    "opencv_threads": 2,
+    "opencv_package": "opencv-python",
+    "parallel_framework": "pthreads",
+    "cpu_hw_features_baseline": "NEON FP16",
+    "cpu_hw_features_dispatched": "",
+    "cool_present": false
+  },
+  "videos": [
+    {
+      "video": "/home/ubuntu/margai/assets/cars_moving_into_pothole_CC_BY_SA_4.0.webm",
+      "name": "cars_moving_into_pothole_CC_BY_SA_4.0.webm",
+      "repeats": 2,
+      "frames": 621,
+      "processed_frames": 207,
+      "keyframes": 14,
+      "wall_s": 137.233962832,
+      "fps_source": 4.525118907775184,
+      "fps_processed": 1.5083729692583945,
+      "stage_metrics": {
+        "stage_decode_s": 4.604660109499932,
+        "stage_quality_s": 0.5023051210003757,
+        "stage_keyframes_s": 7.368801734500067,
+        "stage_detect_s": 106.39180858200002,
+        "stage_track_s": 0.017164465500087545,
+        "stage_privacy_evidence_s": 5.4371168365000955
+      },
+      "stage_decode_s": 4.604660109499932,
+      "stage_quality_s": 0.5023051210003757,
+      "stage_keyframes_s": 7.368801734500067,
+      "stage_detect_s": 106.39180858200002,
+      "stage_track_s": 0.017164465500087545,
+      "stage_privacy_evidence_s": 5.4371168365000955
+    },
+    {
+      "video": "/home/ubuntu/margai/assets/pothole_kumasi_CC_BY_SA_4.0.ogv",
+      "name": "pothole_kumasi_CC_BY_SA_4.0.ogv",
+      "repeats": 2,
+      "frames": 420,
+      "processed_frames": 140,
+      "keyframes": 14,
+      "wall_s": 96.93206065549998,
+      "fps_source": 4.332931716913509,
+      "fps_processed": 1.4443105723045033,
+      "stage_metrics": {
+        "stage_decode_s": 1.5664090004995614,
+        "stage_quality_s": 0.3298089130004769,
+        "stage_keyframes_s": 4.5735932219996585,
+        "stage_detect_s": 72.06561894200064,
+        "stage_track_s": 0.01319354599968392,
+        "stage_privacy_evidence_s": 6.915766815499978
+      },
+      "stage_decode_s": 1.5664090004995614,
+      "stage_quality_s": 0.3298089130004769,
+      "stage_keyframes_s": 4.5735932219996585,
+      "stage_detect_s": 72.06561894200064,
+      "stage_track_s": 0.01319354599968392,
+      "stage_privacy_evidence_s": 6.915766815499978
+    }
+  ],
+  "detector": {
+    "images": 0,
+    "median_ms": 0.0,
+    "p95_ms": 0.0,
+    "images_per_second": 0.0
+  }
+}

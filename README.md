@@ -65,6 +65,17 @@ retained only for agent re-inspection and is not served by the API.
 ## AWS deployment
 
 The AWS stack in `infra/deploy.sh` is the live deployment target.
+It was deployed and verified in `us-east-1` (account-level evidence below),
+then torn down to stay within a $10 hackathon budget; redeploying takes one
+command and about ten minutes.
+
+![MargAI dashboard served from the ALB / ARM64 Fargate task](docs/samples/aws_dashboard.png)
+
+```text
+GET http://margai-LoadB-…elb.amazonaws.com/api/health -> {"status":"ok","read_only":false}
+ECS task: RUNNING, 1024 CPU / 2048 MiB, Linux, cpu-architecture=arm64 (Fargate 1.4.0)
+```
+
 The deployment uses one public-IP Fargate task, an ALB, S3, SQS, DynamoDB,
 ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
 1 vCPU and 2 GB memory.
@@ -110,8 +121,8 @@ definition. The worker uses the MockLLM by default; set
 /home/ubuntu/venv/bin/python eval/eval_dedupe.py
 ```
 
-The x86 OpenCV baseline and the pending Graviton + COOL comparison are
-documented in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+The x86 vs Graviton4 OpenCV benchmark (per-stage) is documented in
+[docs/BENCHMARK.md](docs/BENCHMARK.md).
 
 ### Detector evaluation
 
