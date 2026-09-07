@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 import cv2
+import numpy as np
 
 from .config import VisionConfig
 from .models import Observation, SurveyInstance, SurveyResult
@@ -37,7 +38,7 @@ def _severity_color(severity: int) -> tuple[int, int, int]:
     return 0, 200, 0
 
 
-def _draw_label(frame: object, text: str, origin: tuple[int, int], color: tuple[int, int, int]) -> None:
+def _draw_label(frame: np.ndarray, text: str, origin: tuple[int, int], color: tuple[int, int, int]) -> None:
     x, y = origin
     cv2.putText(
         frame,
