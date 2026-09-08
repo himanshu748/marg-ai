@@ -11,6 +11,10 @@ import pytest
     ("settings", "message"),
     [
         ({"MARG_DEPLOY_READ_ONLY": "false"}, "Writable deployment requires"),
+        (
+            {"MARG_DEPLOY_READ_ONLY": "false", "MARG_ALLOW_INSECURE_WRITES": "true"},
+            "Writable deployment requires",
+        ),
         ({"MARG_API_TOKEN_SECRET_ARN": "a-secret-arn"}, "API token authentication requires"),
         ({"MARG_CERTIFICATE_ARN": "a-certificate-arn"}, "Set MARG_DASHBOARD_DOMAIN"),
         ({"MARG_AGENT_LLM": "invalid-provider"}, "MARG_AGENT_LLM must be"),
@@ -30,6 +34,25 @@ def test_deploy_rejects_unsafe_configuration_before_aws(tmp_path: Path, settings
     assert result.returncode == 1
     assert message in result.stderr
     assert not marker.exists(), "Invalid configuration reached AWS before validation"
+
+
+def test_deploy_allows_token_authenticated_insecure_writes_to_reach_aws(tmp_path: Path) -> None:
+    marker = tmp_path / "aws-called"
+    aws = tmp_path / "aws"
+    aws.write_text('#!/bin/sh\ntouch "$AWS_TEST_MARKER"\nexit 1\n')
+    aws.chmod(0o700)
+    env = {name: value for name, value in os.environ.items() if not name.startswith("MARG_")}
+    env.update(
+        MARG_DEPLOY_READ_ONLY="false",
+        MARG_ALLOW_INSECURE_WRITES="true",
+        MARG_API_TOKEN_SECRET_ARN="arn:aws:secretsmanager:us-east-1:123456789012:secret:x",
+        PATH=f"{tmp_path}:{env.get('PATH', '')}",
+        AWS_TEST_MARKER=str(marker),
+    )
+    script = Path(__file__).parents[1] / "infra" / "deploy.sh"
+    result = subprocess.run(["bash", str(script)], env=env, capture_output=True, text=True, timeout=5, check=False)
+    assert result.returncode != 0
+    assert marker.exists(), "Valid configuration did not reach AWS"
 
 
 @pytest.mark.parametrize(("mode", "expected_gate"), [("mock", "0"), ("bedrock", "1")])

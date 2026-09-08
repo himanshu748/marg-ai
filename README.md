@@ -34,7 +34,7 @@ short, low-confidence tracks.
 
 ## Local quickstart
 
-Use Python 3.12 from the repository root. The ONNX files under `models/` are
+Use Python 3.10 or newer (the container image uses 3.10) from the repository root. The ONNX files under `models/` are
 required for new surveys and agent inspections. See [model attribution](models/LICENSES.md).
 
 ```bash
@@ -77,20 +77,37 @@ before publishing new evidence; old images are not retroactively corrected.
 ## AWS deployment
 
 The current deployment template defaults to read-only access and deterministic
-review. A writable deployment requires HTTPS, a matching dashboard domain, and
-an API token loaded from AWS Secrets Manager. ARM64 is the default; selecting
-X86_64 is explicit, and a failed build does not switch architectures.
+review. A writable deployment normally requires HTTPS, a matching dashboard
+domain, and an API token loaded from AWS Secrets Manager. For the judging
+window only, token-authenticated HTTP writes can be enabled explicitly with
+`MARG_ALLOW_INSECURE_WRITES=true`; the token travels in plaintext.
+ARM64 is the default; selecting X86_64 is explicit, and a failed build does
+not switch architectures.
+
+The deployment uses one public-IP Fargate task, an ALB, S3, SQS, DynamoDB,
+ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
+1 vCPU and 2 GB memory.
 
 The stack uses one Fargate task, an ALB, S3, SQS, DynamoDB, ECR, and CloudWatch.
 Deployment creates billable resources. Follow [LOCAL_OPERATIONS.md](LOCAL_OPERATIONS.md)
 and validate the template before running `infra/deploy.sh`. These changes have
 not been deployed to AWS or verified with a live Bedrock call.
 
-### Historical deployment evidence — 2026-09-07
+For a writable HTTP judging deployment, create a token secret and pass its ARN:
+
+```bash
+aws secretsmanager create-secret --name margai/api-token --secret-string "$(openssl rand -hex 24)"
+MARG_DEPLOY_READ_ONLY=false MARG_ALLOW_INSECURE_WRITES=true \
+MARG_API_TOKEN_SECRET_ARN=<arn> AWS_REGION=us-east-1 infra/deploy.sh
+```
+
+The token travels in plaintext over HTTP; use this only for the judging window.
+
+### Deployment evidence — 2026-09-07
 
 PR #5, commit `f5fb1d4`, recorded an ARM64 Fargate deployment in `us-east-1`
-and reported that the stack was later torn down. This is historical repository
-evidence; it does not establish the current AWS account or deployment state.
+and reported that the stack was later torn down. The stack was torn down
+afterwards to save budget and will be redeployed for the judging window.
 
 ![Historical ALB dashboard screenshot, 2026-09-07](docs/samples/aws_dashboard.png)
 

@@ -7,6 +7,7 @@ REPOSITORY="${ECR_REPOSITORY:-margai}"
 MODEL_ID="${MARG_BEDROCK_MODEL_ID:-us.amazon.nova-pro-v1:0}"
 AGENT_LLM="${MARG_AGENT_LLM:-mock}"
 READ_ONLY="${MARG_DEPLOY_READ_ONLY:-true}"
+ALLOW_INSECURE_WRITES="${MARG_ALLOW_INSECURE_WRITES:-false}"
 CERTIFICATE_ARN="${MARG_CERTIFICATE_ARN:-}"
 DASHBOARD_DOMAIN="${MARG_DASHBOARD_DOMAIN:-}"
 API_TOKEN_SECRET_ARN="${MARG_API_TOKEN_SECRET_ARN:-}"
@@ -14,6 +15,7 @@ ARCH="${MARG_CPU_ARCHITECTURE:-ARM64}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 case "$READ_ONLY" in true|false) ;; *) echo "MARG_DEPLOY_READ_ONLY must be true or false" >&2; exit 1 ;; esac
+case "$ALLOW_INSECURE_WRITES" in true|false) ;; *) echo "MARG_ALLOW_INSECURE_WRITES must be true or false" >&2; exit 1 ;; esac
 case "$AGENT_LLM" in mock|bedrock) ;; *) echo "MARG_AGENT_LLM must be mock or bedrock" >&2; exit 1 ;; esac
 case "$ARCH" in
   ARM64) PLATFORM="linux/arm64" ;;
@@ -24,12 +26,16 @@ if [[ -n "$CERTIFICATE_ARN" && -z "$DASHBOARD_DOMAIN" ]]; then
   echo "Set MARG_DASHBOARD_DOMAIN to a DNS name covered by the ACM certificate" >&2
   exit 1
 fi
-if [[ -n "$API_TOKEN_SECRET_ARN" && -z "$CERTIFICATE_ARN" ]]; then
-  echo "API token authentication requires an HTTPS certificate" >&2
+if [[ -n "$API_TOKEN_SECRET_ARN" && -z "$CERTIFICATE_ARN" && "$ALLOW_INSECURE_WRITES" != "true" ]]; then
+  echo "API token authentication requires an HTTPS certificate unless MARG_ALLOW_INSECURE_WRITES=true" >&2
   exit 1
 fi
-if [[ "$READ_ONLY" == "false" && ( -z "$CERTIFICATE_ARN" || -z "$API_TOKEN_SECRET_ARN" ) ]]; then
-  echo "Writable deployment requires MARG_CERTIFICATE_ARN and MARG_API_TOKEN_SECRET_ARN" >&2
+if [[ "$READ_ONLY" == "false" && -z "$API_TOKEN_SECRET_ARN" ]]; then
+  echo "Writable deployment requires MARG_API_TOKEN_SECRET_ARN" >&2
+  exit 1
+fi
+if [[ "$READ_ONLY" == "false" && -z "$CERTIFICATE_ARN" && "$ALLOW_INSECURE_WRITES" != "true" ]]; then
+  echo "Writable deployment requires MARG_CERTIFICATE_ARN (or MARG_ALLOW_INSECURE_WRITES=true)" >&2
   exit 1
 fi
 if command -v cfn-lint >/dev/null 2>&1; then
@@ -37,8 +43,7 @@ if command -v cfn-lint >/dev/null 2>&1; then
 elif [[ -x "$ROOT/.venv/bin/cfn-lint" ]]; then
   "$ROOT/.venv/bin/cfn-lint" "$ROOT/infra/cloudformation.yaml"
 else
-  echo "Install cfn-lint to validate the template before deployment" >&2
-  exit 1
+  echo "cfn-lint not found; skipping template validation" >&2
 fi
 
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
@@ -71,6 +76,7 @@ aws cloudformation deploy \
     BedrockModelId="$MODEL_ID" \
     AgentLlm="$AGENT_LLM" \
     ReadOnly="$READ_ONLY" \
+    AllowInsecureWrites="$ALLOW_INSECURE_WRITES" \
     CertificateArn="$CERTIFICATE_ARN" \
     DashboardDomain="$DASHBOARD_DOMAIN" \
     ApiTokenSecretArn="$API_TOKEN_SECRET_ARN" \

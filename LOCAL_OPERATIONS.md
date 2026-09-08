@@ -34,6 +34,7 @@ URLs, frontend code, or CloudFormation parameters.
 | `MARG_AGENT_LLM` | Worker provider; set `mock` explicitly for local work | `mock` unless a model ID selects Bedrock |
 | `MARG_BEDROCK_ENABLED` | Set `1` to permit Bedrock invocation | disabled |
 | `MARG_BEDROCK_MODEL_ID` | Bedrock model or inference profile | `us.amazon.nova-pro-v1:0` |
+| `MARG_ALLOW_INSECURE_WRITES` | Set `true` only for token-authenticated HTTP judging deployments | `false` |
 | `AWS_REGION` | Bedrock region | `us-east-1` |
 | `MARG_S3_BUCKET` | Enable AWS survey storage | unset |
 | `MARG_S3_PREFIX` | Survey/upload object prefix | empty |
@@ -137,14 +138,30 @@ A writable deployment needs all of the following:
 With a certificate, the ALB serves HTTPS using TLS 1.2/1.3 and redirects HTTP.
 Use the `DashboardURL` output (the certificate does not cover the raw ALB DNS
 name). Secure session cookies are enabled on HTTPS deployments. Without a
-certificate, the deployment stays read-only and cannot accept API tokens.
-Only publish sanitized demo datasets on an anonymous read-only deployment.
+certificate, the deployment stays read-only unless token-authenticated
+insecure writes are explicitly enabled for judging. Only publish sanitized
+demo datasets on an anonymous read-only deployment.
 
-The deployment script requires `cfn-lint`, validates security prerequisites before
-calling AWS, builds an ARM64 image by default, and uses a new timestamped image
-tag. It does not silently switch a Graviton build to x86 or install privileged
-emulation helpers. Configure your Docker builder for the chosen platform; choose
-`MARG_CPU_ARCHITECTURE=X86_64` explicitly if that is the intended deployment.
+The deployment script uses `cfn-lint` when it is available on `PATH` or under
+`.venv/bin`; otherwise it warns and skips template validation. Install it with
+the `dev` extra for local validation. The script validates security prerequisites
+before calling AWS, builds an ARM64 image by default, and uses a new timestamped
+image tag. It does not silently switch a Graviton build to x86 or install
+privileged emulation helpers. Configure your Docker builder for the chosen
+platform; choose `MARG_CPU_ARCHITECTURE=X86_64` explicitly if that is the
+intended deployment.
+
+Writable judging deployment without an ACM certificate requires a Secrets
+Manager token and explicit insecure-write opt-in:
+
+```bash
+aws secretsmanager create-secret --name margai/api-token --secret-string "$(openssl rand -hex 24)"
+MARG_DEPLOY_READ_ONLY=false MARG_ALLOW_INSECURE_WRITES=true \
+MARG_API_TOKEN_SECRET_ARN=<arn> AWS_REGION=us-east-1 infra/deploy.sh
+```
+
+The token travels in plaintext over HTTP; use this only during the judging
+window.
 
 Existing table, cluster, and log names remain unchanged to avoid replacing live
 resources during a later stack update. This template therefore remains a

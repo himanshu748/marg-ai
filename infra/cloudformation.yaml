@@ -20,7 +20,12 @@ Parameters:
     Type: String
     Default: "true"
     AllowedValues: ["true", "false"]
-    Description: Public demo mode. Writes require HTTPS, a dashboard domain, and an API token secret.
+    Description: Public demo mode. Writable deployments require an API token secret and HTTPS unless AllowInsecureWrites is true.
+  AllowInsecureWrites:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Permit token-authenticated writes over plain HTTP (demo/judging only; token is sent unencrypted).
   CertificateArn:
     Type: String
     Default: ""
@@ -54,10 +59,13 @@ Conditions:
   UseBedrock: !Equals [!Ref AgentLlm, bedrock]
   HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
   HasApiToken: !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+  InsecureWritesAllowed: !Equals [!Ref AllowInsecureWrites, "true"]
   CanWrite: !And
     - !Equals [!Ref ReadOnly, "false"]
-    - !Condition HasCertificate
     - !Condition HasApiToken
+    - !Or
+      - !Condition HasCertificate
+      - !Condition InsecureWritesAllowed
 
 Rules:
   RequireHttpsDomain:
@@ -66,17 +74,26 @@ Rules:
       - Assert: !Not [!Equals [!Ref DashboardDomain, ""]]
         AssertDescription: A certificate needs a matching DashboardDomain with DNS pointing to the ALB.
   RequireSecureWrites:
-    RuleCondition: !Equals [!Ref ReadOnly, "false"]
+    RuleCondition: !And
+      - !Equals [!Ref ReadOnly, "false"]
+      - !Equals [!Ref AllowInsecureWrites, "false"]
     Assertions:
       - Assert: !And
           - !Not [!Equals [!Ref CertificateArn, ""]]
           - !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
         AssertDescription: Writes require CertificateArn and ApiTokenSecretArn.
   RequireSecureAuthentication:
-    RuleCondition: !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+    RuleCondition: !And
+      - !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+      - !Equals [!Ref AllowInsecureWrites, "false"]
     Assertions:
       - Assert: !Not [!Equals [!Ref CertificateArn, ""]]
         AssertDescription: API tokens must only be transmitted through HTTPS.
+  RequireTokenForWrites:
+    RuleCondition: !Equals [!Ref ReadOnly, "false"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+        AssertDescription: Writable deployments always require ApiTokenSecretArn.
 
 Resources:
   SurveyBucket:
