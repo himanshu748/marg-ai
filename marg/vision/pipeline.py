@@ -13,7 +13,7 @@ from .geo import GeoTrack, cluster_instances
 from .ingest import VideoSource
 from .keyframes import KeyframeSelector
 from .models import Detection, SurveyInstance, SurveyResult, SurveySummary
-from .privacy import detect_sensitive_regions, redact
+from .privacy import detect_sensitive_regions, ensure_privacy_ready, redact
 from .quality import assess
 from .severity import bbox_area_m2, score
 from .tracker import InstanceTracker
@@ -29,13 +29,18 @@ def run(
     video_path = Path(video)
     output_dir = Path(out_dir)
     config = config or VisionConfig()
+    if config.redact:
+        ensure_privacy_ready()
     output_dir.mkdir(parents=True, exist_ok=True)
+    # A restarted run must not expose an old completion record with new media.
+    (output_dir / "result.json").unlink(missing_ok=True)
     (output_dir / "keyframes").mkdir(exist_ok=True)
     (output_dir / "crops").mkdir(exist_ok=True)
     (output_dir / "evidence").mkdir(exist_ok=True)
     (output_dir / "evidence_raw").mkdir(exist_ok=True)
     (output_dir / "agent_crops").mkdir(exist_ok=True)
-    for media_dir in ("evidence", "evidence_raw", "crops", "keyframes", "agent_crops"):
+    (output_dir / "samples").mkdir(exist_ok=True)
+    for media_dir in ("evidence", "evidence_raw", "crops", "keyframes", "agent_crops", "samples"):
         for media_path in (output_dir / media_dir).iterdir():
             if media_path.is_file() or media_path.is_symlink():
                 media_path.unlink()
@@ -51,6 +56,7 @@ def run(
     detections_by_class = {class_name: 0 for class_name in config.classes}
     previous_gray: np.ndarray | None = None
     best_frames: dict[int, np.ndarray] = {}
+    best_sensitive_regions: dict[int, list[tuple[int, int, int, int]]] = {}
     evidence_paths: dict[int, str] = {}
     redactions = 0
     stage_times = {
@@ -120,6 +126,12 @@ def run(
             t_s=packet.timestamp_s,
         )
         stage_times["track"] += time.perf_counter() - track_started
+        sensitive_regions = None
+        if config.redact and (keyframe is not None or any(update.best_observation is not None for update in updates)):
+            # Detect on the unannotated frame; overlays can obscure faces/plates.
+            redact_started = time.perf_counter()
+            sensitive_regions = detect_sensitive_regions(packet.frame)
+            stage_times["privacy_evidence"] += time.perf_counter() - redact_started
         for update in updates:
             if update.best_observation is not None:
                 best_frames[update.instance_id] = packet.frame.copy()
@@ -131,9 +143,9 @@ def run(
                     redact_started = time.perf_counter()
                     evidence_frame, count = redact(
                         packet.frame,
-                        detect_sensitive_regions(packet.frame),
-                        protect=[tuple(update.best_observation.bbox)],
+                        sensitive_regions or [],
                     )
+                    best_sensitive_regions[update.instance_id] = sensitive_regions or []
                     stage_times["privacy_evidence"] += time.perf_counter() - redact_started
                     evidence_redaction_frames += 1
                     redactions += count
@@ -151,8 +163,7 @@ def run(
             if config.redact:
                 annotated, count = redact(
                     annotated,
-                    detect_sensitive_regions(annotated),
-                    protect=[tuple(detection.bbox) for detection in detections],
+                    sensitive_regions or [],
                 )
                 redactions += count
             cv2.imwrite(str(path), annotated, [cv2.IMWRITE_JPEG_QUALITY, 90])
@@ -196,6 +207,7 @@ def run(
                 best_bbox,
                 crop_path,
                 redact_output=True,
+                sensitive_regions=best_sensitive_regions.get(track.instance_id),
             )
         else:
             _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
@@ -258,15 +270,26 @@ def _save_crop(
     bbox: tuple[float, float, float, float],
     path: Path,
     redact_output: bool = False,
+    sensitive_regions: list[tuple[int, int, int, int]] | None = None,
 ) -> int:
     if frame is None:
         return 0
     x, y, width, height = [round(value) for value in bbox]
-    crop = frame[max(0, y) : min(frame.shape[0], y + height), max(0, x) : min(frame.shape[1], x + width)]
+    x0, y0 = max(0, x), max(0, y)
+    x1, y1 = min(frame.shape[1], x + width), min(frame.shape[0], y + height)
+    if x1 <= x0 or y1 <= y0:
+        return 0
+    crop = frame[y0:y1, x0:x1]
     if crop.size:
         count = 0
         if redact_output:
-            crop, count = redact(crop, detect_sensitive_regions(crop), protect=[(0.0, 0.0, float(crop.shape[1]), float(crop.shape[0]))])
+            regions = sensitive_regions if sensitive_regions is not None else detect_sensitive_regions(frame)
+            crop_regions = []
+            for sx, sy, sw, sh in regions:
+                left, top, right, bottom = max(x0, sx), max(y0, sy), min(x1, sx + sw), min(y1, sy + sh)
+                if right > left and bottom > top:
+                    crop_regions.append((left - x0, top - y0, right - left, bottom - top))
+            crop, count = redact(crop, crop_regions)
         cv2.imwrite(str(path), crop, [cv2.IMWRITE_JPEG_QUALITY, 90])
         return count
     return 0

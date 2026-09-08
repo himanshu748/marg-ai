@@ -11,6 +11,36 @@ Parameters:
   BedrockModelId:
     Type: String
     Default: us.amazon.nova-pro-v1:0
+  AgentLlm:
+    Type: String
+    Default: mock
+    AllowedValues: [mock, bedrock]
+    Description: Use mock while Bedrock access is pending; select bedrock only after a successful provider check.
+  ReadOnly:
+    Type: String
+    Default: "true"
+    AllowedValues: ["true", "false"]
+    Description: Public demo mode. Writable deployments require an API token secret and HTTPS unless AllowInsecureWrites is true.
+  AllowInsecureWrites:
+    Type: String
+    Default: "false"
+    AllowedValues: ["true", "false"]
+    Description: Permit token-authenticated writes over plain HTTP (demo/judging only; token is sent unencrypted).
+  CertificateArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^arn:[^:]+:acm:[^:]+:[0-9]{12}:certificate/.+$'
+    Description: Optional ACM certificate in this region for the dashboard domain.
+  DashboardDomain:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$'
+    Description: DNS name covered by the certificate. Point it at the LoadBalancerDNS output.
+  ApiTokenSecretArn:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^arn:[^:]+:secretsmanager:[^:]+:[0-9]{12}:secret:.+$'
+    Description: Secrets Manager ARN containing the API token as a plaintext secret value; do not pass the token itself.
   CpuArchitecture:
     Type: String
     Default: ARM64
@@ -26,6 +56,44 @@ Parameters:
 
 Conditions:
   ShouldCreateEcrRepository: !Equals [!Ref CreateEcrRepository, "true"]
+  UseBedrock: !Equals [!Ref AgentLlm, bedrock]
+  HasCertificate: !Not [!Equals [!Ref CertificateArn, ""]]
+  HasApiToken: !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+  InsecureWritesAllowed: !Equals [!Ref AllowInsecureWrites, "true"]
+  CanWrite: !And
+    - !Equals [!Ref ReadOnly, "false"]
+    - !Condition HasApiToken
+    - !Or
+      - !Condition HasCertificate
+      - !Condition InsecureWritesAllowed
+
+Rules:
+  RequireHttpsDomain:
+    RuleCondition: !Not [!Equals [!Ref CertificateArn, ""]]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref DashboardDomain, ""]]
+        AssertDescription: A certificate needs a matching DashboardDomain with DNS pointing to the ALB.
+  RequireSecureWrites:
+    RuleCondition: !And
+      - !Equals [!Ref ReadOnly, "false"]
+      - !Equals [!Ref AllowInsecureWrites, "false"]
+    Assertions:
+      - Assert: !And
+          - !Not [!Equals [!Ref CertificateArn, ""]]
+          - !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+        AssertDescription: Writes require CertificateArn and ApiTokenSecretArn.
+  RequireSecureAuthentication:
+    RuleCondition: !And
+      - !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+      - !Equals [!Ref AllowInsecureWrites, "false"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref CertificateArn, ""]]
+        AssertDescription: API tokens must only be transmitted through HTTPS.
+  RequireTokenForWrites:
+    RuleCondition: !Equals [!Ref ReadOnly, "false"]
+    Assertions:
+      - Assert: !Not [!Equals [!Ref ApiTokenSecretArn, ""]]
+        AssertDescription: Writable deployments always require ApiTokenSecretArn.
 
 Resources:
   SurveyBucket:
@@ -33,16 +101,41 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
       LifecycleConfiguration:
         Rules:
           - Id: ExpireSurveyObjects
             Status: Enabled
             ExpirationInDays: 30
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 30
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+
+  SurveyBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref SurveyBucket
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource:
+              - !GetAtt SurveyBucket.Arn
+              - !Sub "${SurveyBucket.Arn}/*"
+            Condition:
+              Bool:
+                aws:SecureTransport: "false"
 
   JobDeadLetterQueue:
     Type: AWS::SQS::Queue
@@ -59,6 +152,8 @@ Resources:
 
   WorkOrdersTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: margai-work-orders
       BillingMode: PAY_PER_REQUEST
@@ -75,6 +170,8 @@ Resources:
 
   SurveysTable:
     Type: AWS::DynamoDB::Table
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
     Properties:
       TableName: margai-surveys
       BillingMode: PAY_PER_REQUEST
@@ -115,7 +212,17 @@ Resources:
               Service: ecs-tasks.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - !Sub "arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+      Policies: !If
+        - HasApiToken
+        - - PolicyName: ReadApiToken
+            PolicyDocument:
+              Version: "2012-10-17"
+              Statement:
+                - Effect: Allow
+                  Action: secretsmanager:GetSecretValue
+                  Resource: !Ref ApiTokenSecretArn
+        - !Ref AWS::NoValue
 
   TaskRole:
     Type: AWS::IAM::Role
@@ -143,6 +250,8 @@ Resources:
               - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
+                  - sqs:SendMessage
+                  - sqs:ChangeMessageVisibility
                   - sqs:DeleteMessage
                   - sqs:GetQueueAttributes
                 Resource: !GetAtt JobQueue.Arn
@@ -194,6 +303,16 @@ Resources:
         - IpProtocol: -1
           CidrIp: 0.0.0.0/0
 
+  HttpsIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: HasCertificate
+    Properties:
+      GroupId: !Ref AlbSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      CidrIp: 0.0.0.0/0
+
   LoadBalancer:
     Type: AWS::ElasticLoadBalancingV2::LoadBalancer
     Properties:
@@ -216,11 +335,32 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       LoadBalancerArn: !Ref LoadBalancer
-      Port: 80
-      Protocol: HTTP
+      Port: !If [HasCertificate, 443, 80]
+      Protocol: !If [HasCertificate, HTTPS, HTTP]
+      SslPolicy: !If [HasCertificate, ELBSecurityPolicy-TLS13-1-2-2021-06, !Ref AWS::NoValue]
+      Certificates: !If
+        - HasCertificate
+        - - CertificateArn: !Ref CertificateArn
+        - !Ref AWS::NoValue
       DefaultActions:
         - Type: forward
           TargetGroupArn: !Ref TargetGroup
+
+  HttpRedirectListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: HasCertificate
+    Properties:
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            Path: "/#{path}"
+            Query: "#{query}"
+            StatusCode: HTTP_301
 
   TaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -244,6 +384,14 @@ Resources:
             - ContainerPort: 8080
               Protocol: tcp
           Environment:
+            - Name: MARG_READ_ONLY
+              Value: !If [CanWrite, "0", "1"]
+            - Name: MARG_COOKIE_SECURE
+              Value: !If [HasCertificate, "1", "0"]
+            - Name: MARG_AGENT_LLM
+              Value: !Ref AgentLlm
+            - Name: MARG_BEDROCK_ENABLED
+              Value: !If [UseBedrock, "1", "0"]
             - Name: PORT
               Value: "8080"
             - Name: AWS_REGION
@@ -258,6 +406,11 @@ Resources:
               Value: !Ref SurveysTable
             - Name: MARG_BEDROCK_MODEL_ID
               Value: !Ref BedrockModelId
+          Secrets: !If
+            - HasApiToken
+            - - Name: MARG_API_TOKEN
+                ValueFrom: !Ref ApiTokenSecretArn
+            - !Ref AWS::NoValue
           LogConfiguration:
             LogDriver: awslogs
             Options:
@@ -274,6 +427,11 @@ Resources:
       DesiredCount: 1
       LaunchType: FARGATE
       PlatformVersion: LATEST
+      HealthCheckGracePeriodSeconds: 60
+      DeploymentConfiguration:
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
       TaskDefinition: !Ref TaskDefinition
       NetworkConfiguration:
         AwsvpcConfiguration:
@@ -288,7 +446,17 @@ Resources:
 
 Outputs:
   DashboardURL:
-    Value: !Sub "http://${LoadBalancer.DNSName}"
+    Description: Dashboard URL. HTTPS requires configuring your domain's DNS.
+    Value: !If [HasCertificate, !Sub "https://${DashboardDomain}", !Sub "http://${LoadBalancer.DNSName}"]
+  LoadBalancerDNS:
+    Description: DNS alias or CNAME target for the dashboard domain.
+    Value: !GetAtt LoadBalancer.DNSName
+  ServiceName:
+    Description: Physical ECS service name for operational commands.
+    Value: !GetAtt Service.Name
+  ClusterName:
+    Description: ECS cluster name for operational commands.
+    Value: !Ref Cluster
   Bucket:
     Value: !Ref SurveyBucket
   Queue:

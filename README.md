@@ -4,10 +4,12 @@
 
 MargAI is an OpenCV road-damage survey agent. It processes dashcam video,
 detects RDD2022 cracks and potholes, tracks observations into instances,
-preserves full-resolution evidence, and uses an approval-gated agent to draft
+retains evidence frames, and uses an approval-gated agent to draft
 municipal work orders.
 
-![Annotated pothole survey](docs/samples/pothole_cars_annotated.gif)
+The local workbench supports video upload, evidence review, policy traces, and
+human decisions while Bedrock access is pending. Its default review mode is
+deterministic; it does not claim live model reasoning.
 
 ## Architecture
 
@@ -32,23 +34,29 @@ short, low-confidence tracks.
 
 ## Local quickstart
 
-```bash
-python -m venv /home/ubuntu/venv
-/home/ubuntu/venv/bin/pip install -e '.[api,dev]'
-/home/ubuntu/venv/bin/python -m marg.vision.pipeline \
-  --video /path/to/road-video.webm --out outputs/demo
-/home/ubuntu/venv/bin/python -m marg.agent.loop \
-  --result outputs/demo/result.json --llm mock --out outputs/demo/agent
-/home/ubuntu/venv/bin/python -m marg.api --data outputs --port 8000
-```
-
-Open `http://localhost:8000`.
-
-For a zero-setup judge quickstart using the committed demo surveys:
+Use Python 3.10 or newer (the container image uses 3.10) from the repository root. The ONNX files under `models/` are
+required for new surveys and agent inspections. See [model attribution](models/LICENSES.md).
 
 ```bash
-MARG_DATA_ROOT=demo python -m marg.entrypoint
+python3 -m venv .venv
+.venv/bin/python -m pip install -e '.[api,dev]'
+.venv/bin/python -c "import shutil; shutil.copytree('demo', 'outputs/workbench')"
+env -u MARG_S3_BUCKET -u MARG_SQS_QUEUE_URL \
+  MARG_DATA_ROOT=outputs/workbench MARG_READ_ONLY=0 \
+  MARG_AGENT_LLM=mock MARG_BEDROCK_ENABLED=0 \
+  .venv/bin/python -m uvicorn marg.api.app:app --host 127.0.0.1 --port 8000
 ```
+
+Open [localhost:8000](http://localhost:8000). The copy step refuses an existing
+`outputs/workbench` directory; reuse an existing copy by skipping that step or
+choose a new output directory. Keep the tracked `demo/` fixtures unchanged.
+
+Upload a video with optional timestamped GPX. Without GPX, the interface labels
+the location as synthetic. Processing and deterministic review run locally with
+observable job status. Set `MARG_READ_ONLY=1` for a view-only workspace.
+
+See [local operations and the API contract](LOCAL_OPERATIONS.md) for authentication,
+limits, persistence, failure handling, and future AWS deployment requirements.
 
 ### Privacy redaction
 
@@ -57,74 +65,79 @@ detectors redact faces with YuNet (`face_detection_yunet_2023mar.onnx`, MIT)
 and plates with LPD-YuNet (`license_plate_detection_lpd_yunet_2023mar.onnx`,
 Apache-2.0). Plate search uses the full frame plus six overlapping upper and
 lower tiles; this avoids losing small plates in a 320x240 full-frame resize.
-Pixelation never modifies the protected road-damage bbox. `evidence_raw/` is
-retained only for agent re-inspection and is not served by the API.
+Sensitive faces and plates remain redacted even where they overlap a road-damage
+box. Missing or failing privacy detectors stop processing instead of silently
+exporting unchecked images. Automated detection can still miss sensitive pixels;
+review exports before sharing. `evidence_raw/` is private agent re-inspection
+material and is not served by the API.
 
-![Before and after privacy redaction](docs/samples/redaction_demo.jpg)
+The committed sample imagery predates these privacy changes. Regenerate surveys
+before publishing new evidence; old images are not retroactively corrected.
 
 ## AWS deployment
 
-The AWS stack in `infra/deploy.sh` is the live deployment target.
-It was deployed and verified in `us-east-1` (account-level evidence below),
-then torn down to stay within a $10 hackathon budget; redeploying takes one
-command and about ten minutes.
-
-![MargAI dashboard served from the ALB / ARM64 Fargate task](docs/samples/aws_dashboard.png)
-
-```text
-GET http://margai-LoadB-…elb.amazonaws.com/api/health -> {"status":"ok","read_only":false}
-ECS task: RUNNING, 1024 CPU / 2048 MiB, Linux, cpu-architecture=arm64 (Fargate 1.4.0)
-```
+The current deployment template defaults to read-only access and deterministic
+review. A writable deployment normally requires HTTPS, a matching dashboard
+domain, and an API token loaded from AWS Secrets Manager. For the judging
+window only, token-authenticated HTTP writes can be enabled explicitly with
+`MARG_ALLOW_INSECURE_WRITES=true`; the token travels in plaintext.
+ARM64 is the default; selecting X86_64 is explicit, and a failed build does
+not switch architectures.
 
 The deployment uses one public-IP Fargate task, an ALB, S3, SQS, DynamoDB,
 ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
 1 vCPU and 2 GB memory.
 
+The stack uses one Fargate task, an ALB, S3, SQS, DynamoDB, ECR, and CloudWatch.
+Deployment creates billable resources. Follow [LOCAL_OPERATIONS.md](LOCAL_OPERATIONS.md)
+and validate the template before running `infra/deploy.sh`. These changes have
+not been deployed to AWS or verified with a live Bedrock call.
+
+For a writable HTTP judging deployment, create a token secret and pass its ARN:
+
 ```bash
-aws configure
-AWS_REGION=us-east-1 infra/deploy.sh
-MARG_S3_BUCKET="$(aws cloudformation describe-stacks --stack-name margai \
-  --query 'Stacks[0].Outputs[?OutputKey==`Bucket`].OutputValue' --output text)" \
-  infra/seed_demo.sh
+aws secretsmanager create-secret --name margai/api-token --secret-string "$(openssl rand -hex 24)"
+MARG_DEPLOY_READ_ONLY=false MARG_ALLOW_INSECURE_WRITES=true \
+MARG_API_TOKEN_SECRET_ARN=<arn> AWS_REGION=us-east-1 infra/deploy.sh
 ```
 
-`infra/deploy.sh` discovers the default VPC and default subnets, builds and
-pushes the image, deploys `infra/cloudformation.yaml`, and prints the ALB URL.
-If ARM64 binfmt or the build fails, it retries with an X86_64 image and task
-definition. The worker uses the MockLLM by default; set
-`MARG_AGENT_LLM=bedrock` (and `MARG_BEDROCK_MODEL_ID`) to use Bedrock.
+The token travels in plaintext over HTTP; use this only for the judging window.
 
-## Environment variables
+### Deployment evidence — 2026-09-07
 
-| Variable | Purpose | Default |
-| --- | --- | --- |
-| `AWS_REGION` | AWS region | `us-east-1` |
-| `MARG_S3_BUCKET` | Enables S3-backed API storage | unset |
-| `MARG_S3_PREFIX` | S3 key prefix | empty |
-| `MARG_S3_CACHE_DIR` | Local survey cache | `/tmp/marg-cache` |
-| `MARG_SQS_QUEUE_URL` | Upload worker queue | unset |
-| `MARG_AGENT_LLM` | Worker agent backend | `mock` |
-| `MARG_BEDROCK_MODEL_ID` | Bedrock model ID | `us.amazon.nova-pro-v1:0` |
-| `MARG_WORK_ORDERS_TABLE` | Work-order table | `margai-work-orders` |
-| `MARG_SURVEYS_TABLE` | Survey status table | `margai-surveys` |
+PR #5, commit `f5fb1d4`, recorded an ARM64 Fargate deployment in `us-east-1`
+and reported that the stack was later torn down. The stack was torn down
+afterwards to save budget and will be redeployed for the judging window.
+
+![Historical ALB dashboard screenshot, 2026-09-07](docs/samples/aws_dashboard.png)
+
+```text
+Recorded health response: {"status":"ok","read_only":false}
+Recorded task: RUNNING, 1024 CPU / 2048 MiB, Linux ARM64, Fargate 1.4.0
+```
 
 ## Evaluation and tests
 
 ```bash
-/home/ubuntu/venv/bin/ruff check .
-/home/ubuntu/venv/bin/python -m pytest -q
-/home/ubuntu/venv/bin/python eval/eval_agent.py --llm mock
-/home/ubuntu/venv/bin/python eval/eval_detector.py \
-  --images /home/ubuntu/assets/rdd2022_india/eval_slice/images \
-  --labels /home/ubuntu/assets/rdd2022_india/eval_slice/labels \
+.venv/bin/ruff check .
+.venv/bin/python -m pytest -q
+.venv/bin/python eval/eval_agent.py --llm mock
+.venv/bin/python eval/eval_detector.py \
+  --images /path/to/rdd2022_india/eval_slice/images \
+  --labels /path/to/rdd2022_india/eval_slice/labels \
   --out eval/results/detector_india.json
-/home/ubuntu/venv/bin/python eval/eval_dedupe.py
+.venv/bin/python eval/eval_dedupe.py
 ```
 
-The x86 vs Graviton4 OpenCV benchmark (per-stage) is documented in
-[docs/BENCHMARK.md](docs/BENCHMARK.md).
+The historical x86 vs Graviton4 benchmark uses stock OpenCV wheels and is
+documented in [docs/BENCHMARK.md](docs/BENCHMARK.md). It does not measure COOL.
 
-### Detector evaluation
+### Historical detector evaluation
+
+The following measurements are preserved from the 2026-09-07 PR #5 baseline
+(the evaluation artifact was committed on 2026-09-06). They were not rerun for
+this workbench update and are not current hardware or model-access claims.
+
 
 The OpenCV DNN detector was evaluated on a 600-image labelled India slice from
 RDD2022. AP uses all-point interpolation over confidence-ranked detections at
@@ -144,7 +157,10 @@ At the production threshold, precision was **0.8376** and recall was
 **INTEL(R) XEON(R) PLATINUM 8559C** CPU. Annotated failures are in
 `docs/failures/`.
 
-### Deduplication evaluation
+### Historical deduplication evaluation
+
+These figures are also retained from the PR #5 baseline.
+
 
 Manual visible-pothole counts were made from the evidence frames and keyframes.
 `min_observations=2` drops a closed track only when it also has
@@ -157,7 +173,7 @@ Manual visible-pothole counts were made from the evidence frames and keyframes.
 | pothole_kumasi | Before gating | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
 | pothole_kumasi | After gating | 96 | 3 | 32.00:1 | 2 | 0.667 | 1.000 |
 
-The latest privacy-enabled demo runs recorded 21 redactions for
+The historical privacy-enabled demo runs recorded 21 redactions for
 `pothole_cars` and 19 for `pothole_kumasi`. Evidence redaction averaged
 332.57 ms and 345.81 ms per evidence frame respectively.
 
@@ -168,12 +184,14 @@ Per-instance observation counts are `[2, 1, 4, 14]` for `pothole_cars` and
 ### Run the test suite / CI
 
 ```bash
-/home/ubuntu/venv/bin/ruff check .
-/home/ubuntu/venv/bin/python -m pytest -q
+.venv/bin/ruff check .
+.venv/bin/python -m pytest -q
 ```
 
 The same Ruff and pytest checks run on pushes and pull requests in GitHub
-Actions. The current local suite passes **25 tests**.
+Actions. Test counts change as coverage grows; use the command output from the
+checkout being reviewed. Local tests do not establish live AWS, Bedrock, or COOL
+Marketplace availability.
 
 ## Licenses and attribution
 

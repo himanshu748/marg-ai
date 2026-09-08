@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass, field
 from typing import Protocol
 
+from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 
 from marg.vision.models import SurveyResult
@@ -11,6 +12,14 @@ from .prompts import FINALIZE_INSTRUCTION, SYSTEM_PROMPT
 
 class BedrockUnavailable(RuntimeError):
     """Raised when Bedrock cannot service a Converse request."""
+
+    def __init__(self, message: str, code: str = "BedrockUnavailable", retryable: bool = False):
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+
+    def to_dict(self) -> dict[str, object]:
+        return {"code": self.code, "message": str(self), "retryable": self.retryable}
 
 
 @dataclass(slots=True)
@@ -43,34 +52,61 @@ class BedrockLLM:
             "MARG_BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0"
         )
         self.region = region or os.environ.get("AWS_REGION", "us-east-1")
+        self.live_inference = False
+        self._client = None
+        self.config = Config(
+            connect_timeout=_bounded_integer("MARG_BEDROCK_CONNECT_TIMEOUT", 5, 1, 30),
+            read_timeout=_bounded_integer("MARG_BEDROCK_READ_TIMEOUT", 60, 1, 300),
+            retries={
+                "mode": "adaptive",
+                "total_max_attempts": _bounded_integer("MARG_BEDROCK_MAX_ATTEMPTS", 2, 1, 5),
+            },
+        )
+        self.max_tokens = _bounded_integer("MARG_BEDROCK_MAX_TOKENS", 1024, 128, 4096)
 
     def converse(
         self, messages: list[dict[str, object]], tools: list[dict[str, object]]
     ) -> LLMResponse:
+        if os.environ.get("MARG_BEDROCK_ENABLED") != "1":
+            raise BedrockUnavailable(
+                "Bedrock review is disabled until model access is ready. Use an explicit offline review or enable Bedrock in deployment configuration.",
+                "BedrockDisabled",
+            )
         import boto3
 
-        client = boto3.client("bedrock-runtime", region_name=self.region)
         try:
-            response = client.converse(
+            if self._client is None:
+                self._client = boto3.client(
+                    "bedrock-runtime", region_name=self.region, config=self.config
+                )
+            response = self._client.converse(
                 modelId=self.model_id,
                 system=[{"text": SYSTEM_PROMPT}],
                 messages=messages,
                 toolConfig={"tools": tools},
-                inferenceConfig={"maxTokens": 1024, "temperature": 0},
+                inferenceConfig={"maxTokens": self.max_tokens, "temperature": 0},
             )
         except (ClientError, BotoCoreError) as exc:
-            detail = str(exc)
+            code = type(exc).__name__
             if isinstance(exc, ClientError):
-                detail = str(exc.response.get("Error", {}).get("Message", detail))
+                code = str(exc.response.get("Error", {}).get("Code", code))
+            retryable = code in {
+                "ThrottlingException", "ModelTimeoutException", "ServiceUnavailableException",
+                "InternalServerException", "ReadTimeoutError", "ConnectTimeoutError",
+                "EndpointConnectionError", "ConnectionClosedError",
+            }
             raise BedrockUnavailable(
-                f"Bedrock Converse unavailable for {self.model_id} in {self.region}: {detail}"
+                f"Bedrock review is unavailable ({code}). Check model access, billing and quotas before retrying.",
+                code=code,
+                retryable=retryable,
             ) from exc
+        self.live_inference = True
         output = response.get("output", {})
         if not isinstance(output, dict):
-            return LLMResponse()
+            raise BedrockUnavailable("Bedrock returned an invalid response.", "InvalidResponse")
         message = output.get("message", {})
         if not isinstance(message, dict):
-            return LLMResponse()
+            raise BedrockUnavailable("Bedrock returned an invalid response.", "InvalidResponse")
         text_parts: list[str] = []
         calls: list[ToolCall] = []
         content = message.get("content", [])
@@ -95,6 +131,8 @@ class BedrockLLM:
                             call_id=str(call_id),
                         )
                     )
+        if not text_parts and not calls:
+            raise BedrockUnavailable("Bedrock returned no usable review content.", "EmptyResponse")
         return LLMResponse(text="\n".join(text_parts), tool_calls=calls)
 
 
@@ -115,6 +153,8 @@ class MockLLM:
         self.result = result
 
     def observe(self, call: ToolCall, output: dict[str, object]) -> None:
+        if output.get("error"):
+            return
         if call.name == "inspect_roi":
             instance_id = int(call.arguments["instance_id"])
             self.inspected.add(instance_id)
@@ -275,7 +315,42 @@ class MockLLM:
         return drafts
 
 
-def default_llm(kind: str) -> LLM:
-    if kind == "mock" or os.environ.get("MARG_LLM") == "mock":
+def _bounded_integer(name: str, default: int, minimum: int, maximum: int) -> int:
+    value = int(os.environ.get(name, str(default)))
+    if not minimum <= value <= maximum:
+        raise ValueError(f"{name} must be between {minimum} and {maximum}")
+    return value
+
+
+def provider_kind(kind: str | None = None) -> str:
+    selected = kind or os.environ.get("MARG_AGENT_LLM") or os.environ.get("MARG_LLM")
+    selected = selected or ("bedrock" if os.environ.get("MARG_BEDROCK_MODEL_ID") else "mock")
+    if selected not in {"mock", "bedrock"}:
+        raise ValueError("Agent provider must be mock or bedrock")
+    return selected
+
+
+def provider_status(kind: str | None = None) -> dict[str, object]:
+    """Describe configuration without invoking a model or probing credentials."""
+    selected = provider_kind(kind)
+    return {
+        "kind": selected,
+        "model_id": os.environ.get("MARG_BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0") if selected == "bedrock" else None,
+        "region": os.environ.get("AWS_REGION", "us-east-1") if selected == "bedrock" else None,
+        "live_inference": False,
+        "readiness": ("unverified" if os.environ.get("MARG_BEDROCK_ENABLED") == "1" else "disabled") if selected == "bedrock" else "offline",
+    }
+
+
+def provider_details(llm: LLM) -> dict[str, object]:
+    if isinstance(llm, MockLLM):
+        return {"kind": "mock", "model_id": None, "region": None, "live_inference": False}
+    if isinstance(llm, BedrockLLM):
+        return {"kind": "bedrock", "model_id": llm.model_id, "region": llm.region, "live_inference": llm.live_inference}
+    return {"kind": "custom", "model_id": None, "region": None, "live_inference": False}
+
+
+def default_llm(kind: str | None = None) -> LLM:
+    if provider_kind(kind) == "mock":
         return MockLLM()
     return BedrockLLM()
