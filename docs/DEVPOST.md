@@ -100,9 +100,11 @@ activated and verified when the account services are enabled.
 
 - **Agentic Vision:** included. The agent inspects evidence, applies explicit
   policy rules, writes a trace, and gates work orders behind human approval.
-- **COOL:** x86/pip-OpenCV baseline recorded in `docs/BENCHMARK.md`;
-  Graviton + COOL remains pending AWS account activation. The pending run is
-  `eval/bench_cool.py run --label graviton_cool` inside the arm64 container.
+- **Graviton:** the stack runs as an ARM64 Fargate task; `docs/BENCHMARK.md`
+  compares x86 vs Graviton4 with stock OpenCV 5 per stage (classic OpenCV
+  stages at parity, `cv2.dnn` 2.2x slower). COOL itself could not be run
+  (Marketplace subscription blocked on the account), so no COOL result is
+  claimed; the harness is ready for it.
 
 ## Submission checklist
 
