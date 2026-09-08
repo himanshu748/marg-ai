@@ -108,6 +108,16 @@ svg {
   stroke-linejoin: round;
   flex-shrink: 0;
 }
+.leaflet-container svg,
+.leaflet-container svg * {
+  width: auto;
+  height: auto;
+  fill: revert-layer;
+  stroke: revert-layer;
+  stroke-width: revert-layer;
+  stroke-linecap: revert-layer;
+  stroke-linejoin: revert-layer;
+}
 img {
   display: block;
   max-width: 100%;
