@@ -1,6 +1,8 @@
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from .policy import escalation_priority
+
 if TYPE_CHECKING:
     from .loop import AgentRun
 
@@ -82,7 +84,7 @@ def audit(result: object, run: "AgentRun") -> AuditReport:
         priority = str(work_order.get("priority", ""))
         ids = work_order.get("instance_ids", [])
         evidence = [by_id[item] for item in ids if isinstance(item, int) and item in by_id] if isinstance(ids, list) else []
-        needs_approval = priority in {"high", "medium"} or any(item.severity >= 4 for item in evidence) or sum(item.class_name == "D40" for item in evidence) >= 3
+        needs_approval = priority in {"high", "medium"} or escalation_priority(evidence) is not None
         if not needs_approval:
             continue
         order_id = str(work_order.get("work_order_id", ""))
@@ -115,7 +117,7 @@ def audit(result: object, run: "AgentRun") -> AuditReport:
     for segment in segments.values():
         actionable = [item for item in instances if item.id in segment.instance_ids and item.id not in dismissed and (item.fused_conf >= 0.55 or item.id in confirmed)]
         orders = [item for item in run.work_orders if item.get("segment_id") == segment.id]
-        required = any(item.severity >= 4 for item in actionable) or sum(item.class_name == "D40" for item in actionable) >= 3 or (len(actionable) >= 2 and all(item.severity <= 2 for item in actionable))
+        required = escalation_priority(actionable) is not None or (len(actionable) >= 2 and all(item.severity <= 2 for item in actionable))
         if len(orders) > 1 or (required and not orders):
             coverage_offenders.append(str(segment.id))
         for order in orders:

@@ -52,6 +52,9 @@ class S3SurveyStore:
     def upload_file(self, path: str | Path, key: str) -> None:
         self.s3.upload_file(str(path), self.bucket, key)
 
+    def delete_file(self, key: str) -> None:
+        self.s3.delete_object(Bucket=self.bucket, Key=key)
+
     def upload_fileobj(self, fileobj: BinaryIO, key: str, content_type: str | None = None) -> None:
         extra = {"ContentType": content_type} if content_type else None
         self.s3.upload_fileobj(fileobj, self.bucket, key, ExtraArgs=extra)
@@ -198,12 +201,13 @@ class S3SurveyStore:
     def update_survey_status(
         self,
         survey_id: str,
-        status: str,
+        status: str | None,
         **values: object,
     ) -> None:
         validate_survey_id(survey_id)
         values.pop("survey_id", None)
-        item: dict[str, object] = {"status": status, **values, "updated_at": datetime.now(timezone.utc).isoformat()}
+        item: dict[str, object] = {"status": status} if status is not None else {}
+        item.update({**values, "updated_at": datetime.now(timezone.utc).isoformat()})
         # Preserve upload keys and creation metadata across processing/retry updates.
         self.dynamodb.Table(self.surveys_table).update_item(
             Key={"survey_id": survey_id},

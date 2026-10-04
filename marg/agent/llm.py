@@ -7,6 +7,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from marg.vision.models import SurveyResult
 
+from .policy import escalation_priority
 from .prompts import FINALIZE_INSTRUCTION, SYSTEM_PROMPT
 
 
@@ -231,29 +232,31 @@ class MockLLM:
                         "request_resurvey",
                         {"segment_id": segment_id, "reason": f"Class disagreement for instance {instance.id}."},
                     )
-            confirmed = instance.fused_conf >= 0.55 or instance.id in self.confirmed
-            if confirmed and (instance.severity >= 4 or (instance.class_name == "D40" and instance.severity >= 3)):
-                segment_id = self._segment_for(instance.id)
-                if segment_id not in self.work_ordered:
-                    priority = "high" if instance.severity >= 5 else "medium"
-                    return self._call(
-                        f"Escalate segment {segment_id} under policy rule 3.",
-                        "draft_work_order",
-                        {
-                            "segment_id": segment_id,
-                            "priority": priority,
-                            "summary": f"Road damage severity {instance.severity}.",
-                            "reason": (
-                                f"{instance.class_name} instance {instance.id} has "
-                                f"severity {instance.severity} and fused confidence "
-                                f"{instance.fused_conf:.2f}."
-                            ),
-                        },
-                    )
         for segment in self.result.segments:
             if segment.id in self.work_ordered:
                 continue
-            segment_instances = [item for item in self.result.instances if item.id in segment.instance_ids]
+            segment_instances = [
+                item for item in self.result.instances
+                if item.id in segment.instance_ids and item.id not in self.dismissed
+            ]
+            if any(item.fused_conf < 0.55 and item.id not in self.confirmed for item in segment_instances):
+                continue
+            priority = escalation_priority(segment_instances)
+            if priority:
+                severity = max(item.severity for item in segment_instances)
+                return self._call(
+                    f"Escalate segment {segment.id} under policy rule 3.",
+                    "draft_work_order",
+                    {
+                        "segment_id": segment.id,
+                        "priority": priority,
+                        "summary": f"Road damage severity {severity}.",
+                        "reason": (
+                            f"Segment {segment.id} contains {len(segment_instances)} "
+                            f"confirmed observations with maximum severity {severity}."
+                        ),
+                    },
+                )
             if len(segment_instances) >= 2 and all(item.severity <= 2 for item in segment_instances):
                 return self._call(
                     f"Draft one low-priority order for segment {segment.id} under policy rule 4.",

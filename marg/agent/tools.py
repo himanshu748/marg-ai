@@ -10,6 +10,8 @@ from marg.vision.detector import DNNDetector
 from marg.vision.models import SurveyInstance, SurveyResult
 from marg.vision.privacy import detect_sensitive_regions, redact
 
+from .policy import escalation_priority
+
 TOOL_SPECS: list[dict[str, object]] = [
     {
         "toolSpec": {
@@ -254,8 +256,8 @@ class ToolSet:
             return {"error": "segment has no actionable damage instances"}
         if any(item.fused_conf < 0.55 and not self.inspections.get(item.id, {}).get("confirmed") for item in instances):
             return {"error": "low-confidence evidence must be confirmed by inspection before drafting"}
-        required_priority = "high" if any(item.severity == 5 for item in instances) else "medium"
-        needs_approval = any(item.severity >= 4 for item in instances) or sum(item.class_name == "D40" for item in instances) >= 3
+        required_priority = escalation_priority(instances)
+        needs_approval = required_priority is not None
         if needs_approval and priority != required_priority:
             return {"error": f"this segment requires {required_priority} priority and human approval"}
         if not needs_approval and (priority != "low" or len(instances) < 2 or any(item.severity > 2 for item in instances)):

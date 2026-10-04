@@ -502,6 +502,7 @@ class MemoryCloud:
             "agent_status": "running",
         }
         self.uploaded = []
+        self.deleted = []
 
     def object_key(self, survey_id, suffix=""):
         return f"{survey_id}/{suffix}".rstrip("/")
@@ -529,11 +530,15 @@ class MemoryCloud:
         return [self.status]
 
     def survey_status(self, survey_id):
-        return self.status if survey_id == "demo" else {}
+        return self.status if survey_id == self.status["survey_id"] else {}
 
     def upload_file(self, path, key):
         self.uploaded.append(key)
         self.objects[key] = Path(path).read_bytes()
+
+    def delete_file(self, key):
+        self.deleted.append(key)
+        self.objects.pop(key, None)
 
     def save_json(self, survey_id, name, payload):
         self.objects[self.object_key(survey_id, name)] = json.dumps(payload).encode()
@@ -542,7 +547,11 @@ class MemoryCloud:
         pass
 
     def update_survey_status(self, survey_id, status, **kwargs):
-        self.status = {"survey_id": survey_id, "status": status, **kwargs}
+        if self.status["survey_id"] != survey_id:
+            self.status = {"survey_id": survey_id}
+        if status is not None:
+            self.status["status"] = status
+        self.status.update(kwargs)
 
 
 def configure_cloud(monkeypatch, tmp_path):
@@ -662,6 +671,237 @@ def test_cloud_rerun_hydrates_images_and_publishes_inspection_crop(
         assert inspection["output"]["crop_path"] == "inspect_inst_0000.jpg"
         assert "demo/agent_crops/inspect_inst_0000.jpg" in cloud.uploaded
         assert (cache / "demo" / "evidence_raw" / "inst_0000.jpg").is_file()
+
+
+@pytest.mark.parametrize("with_gpx", [False, True])
+def test_cloud_queue_failure_cleans_originals_and_allows_retry(monkeypatch, tmp_path, with_gpx):
+    from botocore.exceptions import ClientError
+
+    from marg.worker import process_job
+
+    cache, _, cloud = configure_cloud(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "fixture-queue")
+
+    class Queue:
+        def __init__(self):
+            self.calls = []
+
+        def send_message(self, **kwargs):
+            self.calls.append(json.loads(kwargs["MessageBody"]))
+            if len(self.calls) == 1:
+                raise ClientError({"Error": {"Code": "ServiceUnavailable"}}, "SendMessage")
+            return {"MessageId": "fixture"}
+
+    queue = Queue()
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: queue)
+    clip = (Path(__file__).parent / "fixtures" / "clip3s.mp4").read_bytes()
+    files = {"video": ("clip.mp4", clip)}
+    if with_gpx:
+        files["gpx"] = ("track.gpx", b'<gpx version="1.1"><trk><trkseg><trkpt lat="28.6" lon="77.2"><time>2026-10-04T00:00:00Z</time></trkpt></trkseg></trk></gpx>')
+    application = create_app(cache)
+    with TestClient(application) as client:
+        failure = client.post("/api/surveys/upload", files=files)
+        assert failure.status_code == 503
+        failed_status = cloud.status.copy()
+        failed_job = application.state.jobs.get(str(failed_status["job_id"]))
+        assert failed_status["status"] == failed_job["status"] == "failed"
+        assert failed_status["error"] == failed_job["error"]
+        assert failed_status["finished_at"] == failed_job["finished_at"]
+        assert failed_status["video_key"] == failed_status["gpx_key"] == ""
+        assert failed_status["admission_status"] == "failed"
+        assert cloud.deleted == cloud.uploaded
+        assert len(cloud.deleted) == (2 if with_gpx else 1)
+        assert not any(key.startswith("uploads/") for key in cloud.objects)
+        assert not list((cache / ".marg" / "uploads").iterdir())
+        listed = next(row for row in client.get("/api/surveys").json() if row["survey_id"] == failed_status["survey_id"])
+        assert listed["status"] == "failed"
+
+        # A late delivery after an ambiguous send error must acknowledge the
+        # failed admission without reading originals or restarting processing.
+        monkeypatch.setattr(cloud, "download_file", lambda *args: pytest.fail("Failed admission must not download"))
+        process_job(queue.calls[0], cloud)
+        assert cloud.status == failed_status
+
+        retry = client.post("/api/surveys/upload", files=files)
+        assert retry.status_code == 202
+        retried = retry.json()
+        assert retried["survey_id"] != failed_status["survey_id"]
+        assert cloud.status["status"] == "queued"
+        assert cloud.status["survey_id"] == retried["survey_id"]
+        assert cloud.status["video_key"] in cloud.objects
+        if with_gpx:
+            assert cloud.status["gpx_key"] in cloud.objects
+        assert len(queue.calls) == 2
+        assert client.get(retried["status_url"]).json()["status"] == "queued"
+        assert client.get(failed_job["status_url"]).json()["status"] == "failed"
+
+
+@pytest.mark.parametrize("compensation_failure", ["status", "delete"])
+def test_cloud_upload_compensation_attempts_each_step(monkeypatch, tmp_path, caplog, compensation_failure):
+    from botocore.exceptions import ClientError
+
+    cache, _, cloud = configure_cloud(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "fixture-queue")
+    queued_jobs = []
+    original_update = cloud.update_survey_status
+    original_delete = cloud.delete_file
+
+    def update(survey_id, status, **values):
+        if status == "queued":
+            queued_jobs.append(values["job_id"])
+        if status == "failed" and compensation_failure == "status":
+            raise RuntimeError("status unavailable")
+        original_update(survey_id, status, **values)
+
+    attempted_deletes = []
+
+    def delete(key):
+        attempted_deletes.append(key)
+        if len(attempted_deletes) == 1 and compensation_failure == "delete":
+            raise RuntimeError("delete unavailable")
+        original_delete(key)
+
+    class Queue:
+        def send_message(self, **kwargs):
+            raise ClientError({"Error": {"Code": "QueueUnavailable"}}, "SendMessage")
+
+    monkeypatch.setattr(cloud, "update_survey_status", update)
+    monkeypatch.setattr(cloud, "delete_file", delete)
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: Queue())
+    clip = (Path(__file__).parent / "fixtures" / "clip3s.mp4").read_bytes()
+    files = {
+        "video": ("clip.mp4", clip),
+        "gpx": ("track.gpx", b'<gpx version="1.1"><trk><trkseg><trkpt lat="28.6" lon="77.2"><time>2026-10-04T00:00:00Z</time></trkpt></trkseg></trk></gpx>'),
+    }
+    application = create_app(cache)
+    with TestClient(application) as client:
+        assert client.post("/api/surveys/upload", files=files).status_code == 503
+        assert application.state.jobs.get(queued_jobs[0])["status"] == "failed"
+        assert attempted_deletes == cloud.uploaded
+        assert not list((cache / ".marg" / "uploads").iterdir())
+        assert "QueueUnavailable" in caplog.text  # Original queue error survives.
+        if compensation_failure == "status":
+            assert "Could not publish failed upload status" in caplog.text
+            assert not any(key.startswith("uploads/") for key in cloud.objects)
+        else:
+            assert "Could not remove failed upload original" in caplog.text
+            assert cloud.status["status"] == "failed"
+            assert cloud.uploaded[1] not in cloud.objects
+
+
+def test_cloud_delivery_during_failed_send_waits_for_admission(monkeypatch, tmp_path):
+    from botocore.exceptions import ClientError
+
+    from marg.worker import process_job
+
+    cache, _, cloud = configure_cloud(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "fixture-queue")
+    monkeypatch.setattr("marg.worker.run_pipeline", lambda *args: pytest.fail("Pending admission must not process"))
+    monkeypatch.setattr(cloud, "download_file", lambda *args: pytest.fail("Pending admission must not download"))
+    delivered = []
+
+    class Queue:
+        def send_message(self, **kwargs):
+            body = json.loads(kwargs["MessageBody"])
+            delivered.append(body)
+            assert cloud.status["admission_status"] == "pending"
+            with pytest.raises(RuntimeError, match="admission is pending"):
+                process_job(body, cloud)
+            assert cloud.status["status"] == "queued"
+            raise ClientError({"Error": {"Code": "QueueUnavailable"}}, "SendMessage")
+
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: Queue())
+    clip = (Path(__file__).parent / "fixtures" / "clip3s.mp4").read_bytes()
+    application = create_app(cache)
+    with TestClient(application) as client:
+        response = client.post("/api/surveys/upload", files={"video": ("clip.mp4", clip)})
+        assert response.status_code == 503
+        assert cloud.status["status"] == "failed"
+        assert cloud.status["admission_status"] == "failed"
+        assert application.state.jobs.get(cloud.status["job_id"])["status"] == "failed"
+        assert cloud.deleted == cloud.uploaded
+        final_status = cloud.status.copy()
+        process_job(delivered[0], cloud)
+        assert cloud.status == final_status
+
+
+def test_cloud_send_accepted_but_admission_write_fails_requires_reconciliation(monkeypatch, tmp_path, caplog):
+    from marg.worker import process_job
+
+    cache, _, cloud = configure_cloud(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "fixture-queue")
+    original_update = cloud.update_survey_status
+    messages = []
+
+    def update(survey_id, status, **values):
+        if values.get("admission_status") == "accepted":
+            raise RuntimeError("status write unavailable")
+        original_update(survey_id, status, **values)
+
+    class Queue:
+        def send_message(self, **kwargs):
+            messages.append(json.loads(kwargs["MessageBody"]))
+            return {"MessageId": "fixture"}
+
+    monkeypatch.setattr(cloud, "update_survey_status", update)
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: Queue())
+    monkeypatch.setattr("marg.worker.run_pipeline", lambda *args: pytest.fail("Pending admission must not process"))
+    monkeypatch.setattr(cloud, "download_file", lambda *args: pytest.fail("Pending admission must not download"))
+    clip = (Path(__file__).parent / "fixtures" / "clip3s.mp4").read_bytes()
+    application = create_app(cache)
+    with TestClient(application) as client:
+        response = client.post("/api/surveys/upload", files={"video": ("clip.mp4", clip)})
+        assert response.status_code == 503
+        detail = response.json()["detail"]
+        assert "do not re-upload" in detail["message"]
+        job = client.get(detail["status_url"]).json()
+        assert job["job_id"] == detail["job_id"]
+        assert job["status"] == "queued"
+        assert job["admission_status"] == "pending"
+        assert job["error"] == detail["message"]
+        assert application.state.jobs.get(job["job_id"])["error"] == detail["message"]
+        assert cloud.status["status"] == "queued"
+        assert cloud.status["admission_status"] == "pending"
+        assert cloud.status["video_key"] in cloud.objects
+        assert not cloud.deleted
+        assert not list((cache / ".marg" / "uploads").iterdir())
+        assert "Could not confirm queued upload admission" in caplog.text
+        before_delivery = cloud.status.copy()
+        with pytest.raises(RuntimeError, match="admission is pending"):
+            process_job(messages[0], cloud)
+        assert cloud.status == before_delivery
+
+        # Once an operator confirms admission (or a timed-out write becomes
+        # visible), polling must clear the local reconciliation diagnostic.
+        original_update(cloud.status["survey_id"], None, admission_status="accepted")
+        reconciled = client.get(detail["status_url"]).json()
+        assert reconciled["status"] == "queued"
+        assert reconciled["admission_status"] == "accepted"
+        assert reconciled["error"] is None
+
+
+def test_cloud_accepted_upload_survives_staging_cleanup_failure(monkeypatch, tmp_path):
+    cache, _, cloud = configure_cloud(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "fixture-queue")
+
+    class Queue:
+        def send_message(self, **kwargs):
+            return {"MessageId": "fixture"}
+
+    def cleanup(path, *, ignore_errors=False):
+        if not ignore_errors:
+            raise OSError("staging filesystem unavailable")
+
+    monkeypatch.setattr("boto3.client", lambda *args, **kwargs: Queue())
+    monkeypatch.setattr(api.shutil, "rmtree", cleanup)
+    clip = (Path(__file__).parent / "fixtures" / "clip3s.mp4").read_bytes()
+    with TestClient(create_app(cache)) as client:
+        response = client.post("/api/surveys/upload", files={"video": ("clip.mp4", clip)})
+        assert response.status_code == 202
+        assert cloud.status["status"] == "queued"
+        assert cloud.status["video_key"] in cloud.objects
+        assert not cloud.deleted
+        assert client.get(response.json()["status_url"]).json()["status"] == "queued"
 
 
 def test_cloud_uploads_do_not_consume_local_executor_capacity(monkeypatch, tmp_path):

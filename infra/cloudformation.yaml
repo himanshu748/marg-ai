@@ -248,6 +248,9 @@ Resources:
                   - !GetAtt SurveyBucket.Arn
                   - !Sub "${SurveyBucket.Arn}/*"
               - Effect: Allow
+                Action: s3:DeleteObject
+                Resource: !Sub "${SurveyBucket.Arn}/uploads/*"
+              - Effect: Allow
                 Action:
                   - sqs:ReceiveMessage
                   - sqs:SendMessage

@@ -95,3 +95,34 @@ def test_worker_survives_job_failure_and_only_acknowledges_success(monkeypatch):
     monkeypatch.setattr("marg.worker.process_job", process)
     worker_loop(stop)
     assert deleted == ['{"survey_id":"good"}']
+
+
+def test_pending_upload_admission_is_left_unacknowledged(monkeypatch):
+    store = MemoryStore()
+    store.status["admission_status"] = "pending"
+    stop = threading.Event()
+    deleted = []
+    received = []
+
+    class Queue:
+        def receive_message(self, **kwargs):
+            received.append(kwargs)
+            stop.set()
+            return {"Messages": [{"Body": '{"survey_id":"job-1"}', "ReceiptHandle": "pending"}]}
+
+        def delete_message(self, **kwargs):
+            deleted.append(kwargs["ReceiptHandle"])
+
+        def change_message_visibility(self, **kwargs):
+            pytest.fail("Pending admission must retain normal queue visibility")
+
+    monkeypatch.setenv("MARG_SQS_QUEUE_URL", "test-queue")
+    monkeypatch.setenv("MARG_S3_BUCKET", "test-bucket")
+    monkeypatch.setattr("marg.worker.S3SurveyStore", lambda *args: store)
+    monkeypatch.setattr("marg.worker.boto3.client", lambda *args, **kwargs: Queue())
+    monkeypatch.setattr("marg.worker.run_pipeline", lambda *args: pytest.fail("Pending admission must not process"))
+    before = store.status.copy()
+    worker_loop(stop)
+    assert not deleted
+    assert store.status == before
+    assert received[0]["VisibilityTimeout"] == 900

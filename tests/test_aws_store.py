@@ -1,6 +1,20 @@
 from marg.store.aws import S3SurveyStore
 
 
+def test_delete_uploaded_original_uses_exact_bucket_and_key():
+    deleted = []
+
+    class S3:
+        def delete_object(self, **kwargs):
+            deleted.append(kwargs)
+
+    store = S3SurveyStore.__new__(S3SurveyStore)
+    store.bucket = "fixture-bucket"
+    store.s3 = S3()
+    store.delete_file("uploads/survey-1/video.mp4")
+    assert deleted == [{"Bucket": "fixture-bucket", "Key": "uploads/survey-1/video.mp4"}]
+
+
 def test_s3_survey_store_key_layout() -> None:
     store = S3SurveyStore.__new__(S3SurveyStore)
     store.prefix = "surveys"
@@ -48,6 +62,48 @@ def test_status_update_preserves_upload_metadata_and_serializes_float_metrics():
     assert status["runtime"] == Decimal("1.25")
     assert status["nested"]["confidence"] == Decimal("0.5")
     assert status["updated_at"]
+
+
+def test_admission_confirmation_replay_preserves_completed_survey_status():
+    requests = []
+
+    class Table:
+        def __init__(self):
+            self.item = {
+                "survey_id": "demo", "status": "queued", "admission_status": "pending",
+                "video_key": "uploads/demo/video.mp4",
+            }
+
+        def update_item(self, **kwargs):
+            requests.append(kwargs)
+            for alias, key in kwargs["ExpressionAttributeNames"].items():
+                self.item[key] = kwargs["ExpressionAttributeValues"][":" + alias[1:]]
+
+        def get_item(self, **kwargs):
+            return {"Item": self.item.copy()}
+
+    class Dynamo:
+        def __init__(self):
+            self.table = Table()
+
+        def Table(self, name):
+            return self.table
+
+    store = S3SurveyStore.__new__(S3SurveyStore)
+    store.surveys_table = "surveys"
+    store.dynamodb = Dynamo()
+    store.update_survey_status("demo", None, admission_status="accepted")
+    assert store.survey_status("demo")["status"] == "queued"
+    # The first write landed, the worker completed, and then the SDK replayed
+    # the confirmation after a lost response. Only admission metadata may change.
+    store.dynamodb.table.item.update(status="done", agent_status="completed")
+    store.update_survey_status("demo", None, admission_status="accepted")
+    completed = store.survey_status("demo")
+    assert completed["status"] == "done"
+    assert completed["agent_status"] == "completed"
+    assert completed["video_key"] == "uploads/demo/video.mp4"
+    assert completed["admission_status"] == "accepted"
+    assert all("status" not in request["ExpressionAttributeNames"].values() for request in requests)
 
 
 def test_failed_cache_download_does_not_replace_valid_result(tmp_path):

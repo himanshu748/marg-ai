@@ -318,9 +318,11 @@ def create_app(data_root: Path | str) -> FastAPI:
             if normalized:
                 fields = {
                     key: status[key]
-                    for key in ("agent_status", "vision_status", "error")
+                    for key in ("agent_status", "vision_status", "error", "admission_status")
                     if key in status
                 }
+                if job.get("admission_status") == "pending" and status.get("admission_status") == "accepted":
+                    fields["error"] = status.get("error")
                 if normalized == "running" and not job.get("started_at"):
                     fields["started_at"] = status.get("started_at", now())
                 if normalized in {"succeeded", "failed"}:
@@ -624,6 +626,7 @@ def create_app(data_root: Path | str) -> FastAPI:
         gpx_path = staging / "track.gpx" if gpx and gpx.filename else None
         accepted = False
         job: dict[str, object] | None = None
+        original_keys: list[str] = []
         try:
             _copy_upload(video, video_path, max_video_bytes, "Video")
             _validate_video(video_path)
@@ -647,12 +650,15 @@ def create_app(data_root: Path | str) -> FastAPI:
                     if gpx_path
                     else ""
                 )
+                original_keys.append(video_key)
                 s3_store.upload_file(video_path, video_key)
                 if gpx_path:
+                    original_keys.append(gpx_key)
                     s3_store.upload_file(gpx_path, gpx_key)
                 s3_store.update_survey_status(
                     survey_id,
                     "queued",
+                    admission_status="pending",
                     video_key=video_key,
                     gpx_key=gpx_key,
                     created_at=job["created_at"],
@@ -663,7 +669,27 @@ def create_app(data_root: Path | str) -> FastAPI:
                 boto3.client("sqs").send_message(
                     QueueUrl=queue_url, MessageBody=json.dumps({"survey_id": survey_id})
                 )
-                shutil.rmtree(staging)
+                accepted = True
+                try:
+                    s3_store.update_survey_status(
+                        survey_id, None, admission_status="accepted"
+                    )
+                except Exception:
+                    LOGGER.exception("Could not confirm queued upload admission for %s", survey_id)
+                    message = "Queued, but admission confirmation needs reconciliation; do not re-upload."
+                    job = runtime.update(
+                        str(job["job_id"]), admission_status="pending", error=message
+                    )
+                    shutil.rmtree(staging, ignore_errors=True)
+                    raise HTTPException(
+                        status_code=503,
+                        detail={
+                            "message": message,
+                            "job_id": job["job_id"],
+                            "status_url": job["status_url"],
+                        },
+                    ) from None
+                shutil.rmtree(staging, ignore_errors=True)
             else:
                 runtime.submit(
                     job,
@@ -676,13 +702,30 @@ def create_app(data_root: Path | str) -> FastAPI:
         except HTTPException:
             raise
         except Exception:
-            if job:
+            if job and not accepted:
+                error = "The survey could not be queued. Retry the upload."
+                finished_at = now()
                 runtime.update(
                     str(job["job_id"]),
                     status="failed",
-                    error="The survey could not be queued. Retry the upload.",
-                    finished_at=now(),
+                    error=error,
+                    finished_at=finished_at,
                 )
+                if s3_store:
+                    try:
+                        s3_store.update_survey_status(
+                            survey_id, "failed", admission_status="failed",
+                            error=error, finished_at=finished_at,
+                            video_key="", gpx_key="",
+                            job_id=job["job_id"], created_at=job["created_at"],
+                        )
+                    except Exception:
+                        LOGGER.exception("Could not publish failed upload status for %s", survey_id)
+                    for key in original_keys:
+                        try:
+                            s3_store.delete_file(key)
+                        except Exception:
+                            LOGGER.exception("Could not remove failed upload original %s", key)
             raise
         finally:
             video.file.close()

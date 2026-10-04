@@ -28,12 +28,24 @@ logger = logging.getLogger(__name__)
 VISIBILITY_TIMEOUT = 900
 
 
+class AdmissionPending(RuntimeError):
+    """Queue delivery arrived before upload admission could be confirmed."""
+
+
 def process_job(message: dict[str, object], store: S3SurveyStore) -> None:
     raw_id = message.get("survey_id")
     if not isinstance(raw_id, str):
         raise TypeError("A survey_id string is required")
     survey_id = validate_survey_id(raw_id)
     status = store.survey_status(survey_id)
+    if status.get("admission_status") == "pending":
+        # SQS can deliver before the API observes whether send_message succeeded.
+        # Leave the message unacknowledged until admission is confirmed.
+        raise AdmissionPending("Survey upload admission is pending; retry queue delivery")
+    if status.get("admission_status") == "failed":
+        # A send failure can still deliver a message after upload compensation.
+        logger.info("Skipping survey %s whose upload admission failed", survey_id)
+        return
     if status.get("status") == "done":
         logger.info("Skipping completed survey %s", survey_id)
         return
@@ -161,6 +173,8 @@ def worker_loop(stop_event: threading.Event | None = None) -> None:
                 heartbeat.start()
                 process_job(body, store)
                 sqs.delete_message(QueueUrl=queue_url, ReceiptHandle=receipt)
+            except AdmissionPending:
+                logger.info("Upload admission is pending; retaining normal queue visibility for retry")
             except Exception:
                 # A malformed message or vision failure must not kill the only worker
                 # or be acknowledged as a successfully completed survey.
