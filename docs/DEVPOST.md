@@ -51,8 +51,9 @@ Tight crops lost road context during agent inspection, which led to a
 context-window rerun and IoU-aware confirmation rule. The official India
 archive was inaccessible from the evaluation environment, so a derived
 Hugging Face slice was used and its licensing caveat was recorded explicitly.
-AWS service activation currently blocks the competition deployment; the AWS
-stack and `infra/deploy.sh` remain the live deployment path.
+PR #5 recorded a September 7, 2026 AWS deployment, later removed for budget
+control. The stack and `infra/deploy.sh` remain a future deployment path;
+there is no current live endpoint claimed here.
 
 ## Accomplishments
 
@@ -77,8 +78,8 @@ haze, glare, vehicles, and small distant defects.
 Before operational use, MargAI needs stronger privacy recall on small plates
 and non-frontal faces, calibrated physical severity, real GPS and map-matching
 validation, official dataset-license clarification, broader hard-negative
-evaluation, and a live ARM64 Graviton benchmark. The AWS deployment will be
-activated and verified when the account services are enabled.
+evaluation, and a matched ARM64/x86 benchmark. Future deployment requires
+separate approval, budget review, and fresh end-to-end verification.
 
 ## Built with
 
@@ -100,11 +101,10 @@ activated and verified when the account services are enabled.
 
 - **Agentic Vision:** included. The agent inspects evidence, applies explicit
   policy rules, writes a trace, and gates work orders behind human approval.
-- **Graviton:** the stack runs as an ARM64 Fargate task; `docs/BENCHMARK.md`
-  compares x86 vs Graviton4 with stock OpenCV 5 per stage (classic OpenCV
-  stages at parity, `cv2.dnn` 2.2x slower). COOL itself could not be run
-  (Marketplace subscription blocked on the account), so no COOL result is
-  claimed; the harness is ready for it.
+- **Graviton:** the template targets an ARM64 Fargate task. `docs/BENCHMARK.md`
+  preserves historical stock OpenCV 5 measurements from unmatched x86 and
+  Graviton4 hosts. Those runs establish neither Fargate cost nor a COOL result.
+  COOL was not run; current Marketplace access was not checked.
 
 ## Submission checklist
 
@@ -113,7 +113,7 @@ activated and verified when the account services are enabled.
 - [x] Architecture diagram: `docs/ARCHITECTURE.md`,
   `docs/architecture.svg`, and rendered `docs/architecture.png`
 - [x] Local build, deploy, and test instructions in `README.md`
-- [ ] Live endpoint: AWS deployment pending account activation
+- [ ] Live endpoint: historical AWS stack removed for budget control
 - [ ] Demonstration video, maximum five minutes: record using
   `docs/VIDEO_SCRIPT.md`
 - [x] Evaluation evidence: detector, deduplication, agent tables, and eight

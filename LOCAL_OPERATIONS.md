@@ -103,6 +103,27 @@ Cloud reads refresh result, review, and decision metadata. A cloud review hydrat
 inspection images before running and publishes resulting inspection crops. This
 avoids decisions depending on which images a browser previously cached.
 
+If cloud upload admission fails, the API marks the local job failed, attempts
+to publish the same cloud failure, and deletes the uploaded video/GPX objects.
+A retry after failed admission creates a fresh survey ID. Workers defer while
+admission is pending, proceed after confirmed queue acceptance is published,
+and skip messages whose admission failed. Status and deletion failures are
+logged independently; an outage during compensation still needs operator
+reconciliation. This is not a distributed transaction.
+If SQS accepts a message but publishing that acceptance fails, the API retains
+the originals and returns HTTP 503 with the job ID and status URL. Do not
+re-upload: the acceptance write may have succeeded. Check cloud status; if it
+is still pending, an operator must reconcile admission for that same job.
+There is no automatic recovery from a persistently unavailable status store.
+Pending deliveries keep the normal 900-second visibility window so they do not
+exhaust the queue's three-attempt receive budget while admission is finishing.
+An early delivery can therefore delay processing by up to 15 minutes.
+Persistent failures can reach the dead-letter queue; reconciliation may also
+require redriving that job's message.
+The template grants deletion only under `uploads/`. S3 versioning means deletion
+removes the current object but prior versions remain until the existing
+30-day noncurrent-version expiration; it is not immediate permanent erasure.
+
 ## Privacy checks
 
 Face and plate ONNX models must both load before a redacted pipeline run begins.
@@ -177,6 +198,13 @@ one complete survey run. Marketplace agreement state and Nova/Claude access are
 separate from local readiness.
 
 ## Verification
+
+New survey results save the processing frame dimensions used by observation
+boxes. The annotated video renderer uses those dimensions even when processing
+used a custom width. For historical results without dimensions, pass the
+original processing width with `python -m marg.vision.render --target-width N`
+(along with `--survey`, `--video`, and `--out`); the legacy default is 960 and
+0 keeps source size. Odd dimensions are padded by one pixel for MP4 encoding.
 
 ```sh
 .venv/bin/python -m pytest -q

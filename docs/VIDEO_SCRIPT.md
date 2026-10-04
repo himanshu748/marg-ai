@@ -23,7 +23,7 @@ cd /home/ubuntu/repos/marg-ai
 poor-quality frames, selects stable keyframes, detects the four RDD2022
 classes, tracks observations, estimates severity, and saves evidence. Its
 OpenCV 5 YuNet privacy pass tiles the frame for small plates and pixelates
-detected faces and plates without touching the damage bbox.”
+detected faces and plates, including where they overlap damage boxes.”
 
 ```bash
 /home/ubuntu/venv/bin/python -m marg.vision.pipeline \
@@ -110,10 +110,11 @@ cat docs/failures/README.md
 **On screen:** README local quickstart and CloudFormation file.
 
 **Voice-over:** “The same data contract is prepared for S3, SQS, DynamoDB,
-Fargate Graviton, and an ALB. AWS deployment is pending account activation,
-so the local results are the verified evidence today. Future work includes
+Fargate Graviton, and an ALB. A historical AWS deployment was removed for budget
+control. This demo uses local results and does not establish current cloud readiness.
+Future work includes
 stronger privacy recall on small or distant plates, real GPS validation,
-calibrated severity, and a live Graviton benchmark.”
+calibrated severity, and a matched Graviton benchmark. COOL was not run.”
 
 ```bash
 /home/ubuntu/venv/bin/ruff check .

@@ -50,6 +50,7 @@ def run(
     tracker = InstanceTracker(config)
     geo = GeoTrack.from_path(gpx, config)
     frame_count = 0
+    frame_width = frame_height = None
     processed_frames = 0
     keyframe_paths: list[str] = []
     crop_paths: list[str] = []
@@ -73,6 +74,7 @@ def run(
     source = VideoSource(video_path, config)
     for packet in source:
         stage_times["decode"] += source.last_decode_s
+        frame_height, frame_width = packet.frame.shape[:2]
         frame_count = packet.index + 1
         if packet.index % config.frame_stride != 0:
             continue
@@ -232,6 +234,8 @@ def run(
         gpx=str(gpx) if gpx is not None else None,
         geo_source=geo.source,
         frames=frame_count,
+        frame_width=frame_width,
+        frame_height=frame_height,
         processed_frames=processed_frames,
         keyframes=len(keyframe_paths),
         detections=detections_by_class,

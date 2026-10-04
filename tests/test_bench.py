@@ -22,3 +22,11 @@ def test_build_comparison_contains_labels_and_speedup() -> None:
     assert "x86" in markdown
     assert "arm" in markdown
     assert "2.00x" in markdown
+    assert "hypothetical compute-only estimates" in markdown
+    assert "$0.04000/h assumed" in markdown
+    unpriced = build_comparison(first, second)
+    assert "not estimated" in unpriced
+    assert "$" not in unpriced
+    second["detector"] = {"images": 0, "median_ms": 0.0, "p95_ms": 0.0, "images_per_second": 0.0}
+    missing_measurement = build_comparison(first, second)
+    assert "0 | not measured | not measured | not measured" in missing_measurement

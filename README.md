@@ -36,6 +36,8 @@ short, low-confidence tracks.
 
 Use Python 3.10 or newer (the container image uses 3.10) from the repository root. The ONNX files under `models/` are
 required for new surveys and agent inspections. See [model attribution](models/LICENSES.md).
+The package uses the headless OpenCV wheel in both local and container installs;
+the dashboard and file renderer do not need desktop GUI bindings.
 
 ```bash
 python3 -m venv .venv
@@ -88,7 +90,6 @@ The deployment uses one public-IP Fargate task, an ALB, S3, SQS, DynamoDB,
 ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
 1 vCPU and 2 GB memory.
 
-The stack uses one Fargate task, an ALB, S3, SQS, DynamoDB, ECR, and CloudWatch.
 Deployment creates billable resources. Follow [LOCAL_OPERATIONS.md](LOCAL_OPERATIONS.md)
 and validate the template before running `infra/deploy.sh`. These changes have
 not been deployed to AWS or verified with a live Bedrock call.
@@ -106,8 +107,9 @@ The token travels in plaintext over HTTP; use this only for the judging window.
 ### Deployment evidence — 2026-09-07
 
 PR #5, commit `f5fb1d4`, recorded an ARM64 Fargate deployment in `us-east-1`
-and reported that the stack was later torn down. The stack was torn down
-afterwards to save budget and will be redeployed for the judging window.
+and reported that the stack was later torn down to save budget. There is no
+current live deployment claimed here. Redeployment requires separate approval
+and fresh endpoint checks; this historical record does not validate the current patch.
 
 ![Historical ALB dashboard screenshot, 2026-09-07](docs/samples/aws_dashboard.png)
 

@@ -74,7 +74,12 @@ def render_annotated_video(
             if not ok:
                 break
             frame = source_frame
-            if config.target_width > 0 and frame.shape[1] > config.target_width:
+            if result.frame_width and result.frame_height:
+                frame = cv2.resize(
+                    frame, (result.frame_width, result.frame_height),
+                    interpolation=cv2.INTER_AREA,
+                )
+            elif config.target_width > 0 and frame.shape[1] > config.target_width:
                 scale = config.target_width / frame.shape[1]
                 frame = cv2.resize(
                     frame,
@@ -107,6 +112,12 @@ def render_annotated_video(
                     (x, y - 5),
                     color,
                 )
+            # mp4v requires even dimensions. Pad instead of silently cropping
+            # a custom-width survey's final row or column.
+            frame = cv2.copyMakeBorder(
+                frame, 0, frame.shape[0] % 2, 0, frame.shape[1] % 2,
+                cv2.BORDER_CONSTANT, value=(0, 0, 0),
+            )
             if writer is None:
                 writer = cv2.VideoWriter(
                     str(out_path),
@@ -131,6 +142,10 @@ def main() -> None:
     parser.add_argument("--video", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--no-redact", action="store_true")
+    parser.add_argument(
+        "--target-width", type=int, default=960,
+        help="Processing width for legacy surveys without saved dimensions (0: original size).",
+    )
     args = parser.parse_args()
     result = SurveyResult.model_validate_json(
         (args.survey / "result.json").read_text(encoding="utf-8")
@@ -139,7 +154,7 @@ def main() -> None:
         args.video,
         result,
         args.out,
-        VisionConfig(),
+        VisionConfig(target_width=args.target_width),
         redact=not args.no_redact,
     )
     print(f"wrote {frames} frames to {args.out}")
