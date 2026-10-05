@@ -16,6 +16,10 @@ def test_pipeline_end_to_end(tmp_path: Path) -> None:
     config = VisionConfig(target_width=320, model_path=Path(__file__).parents[1] / "models" / "rdd_yolov8s.onnx")
     result = run(video, out_dir=tmp_path / "out", config=config)
     assert result.frames > 0
+    assert result.frame_width == 320
+    assert result.frame_height is not None and result.frame_height > 0
+    saved = type(result).model_validate_json((tmp_path / "out" / "result.json").read_text())
+    assert (saved.frame_width, saved.frame_height) == (result.frame_width, result.frame_height)
     assert result.geo_source == "synthetic"
     assert (tmp_path / "out" / "result.json").exists()
     output_dir = tmp_path / "out"

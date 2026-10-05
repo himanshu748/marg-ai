@@ -1,5 +1,9 @@
 # Graviton / OpenCV benchmark
 
+These are historical September 2026 measurements on different hosts, not a
+matched Fargate comparison or evidence of COOL use. No benchmark was rerun for
+the local readiness repair.
+
 Both runs use the same harness (`python -m eval.bench_cool run`: one warm-up, then two timed
 end-to-end pipeline runs per demo video) and the same OpenCV 5.0.0 `opencv-python` wheel for
 the respective architecture. Raw JSON: `eval/results/bench_x86_pip_opencv.json` and
@@ -14,12 +18,12 @@ the respective architecture. Raw JSON: `eval/results/bench_x86_pip_opencv.json` 
 
 ## End-to-end pipeline
 
-| Video | Arch | Source FPS | Processed FPS | Median wall (s) | Keyframes | Cost / 1,000 source frames |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| cars_moving_into_pothole (621 frames) | x86_64 | 7.70 | 2.57 | 80.65 | 14 | $0.001781 |
-| cars_moving_into_pothole (621 frames) | aarch64 | 4.53 | 1.51 | 137.23 | 14 | $0.002425 |
-| pothole_kumasi (420 frames) | x86_64 | 7.32 | 2.44 | 57.42 | 15 | $0.001875 |
-| pothole_kumasi (420 frames) | aarch64 | 4.33 | 1.44 | 96.93 | 14 | $0.002532 |
+| Video | Arch | Source FPS | Processed FPS | Median wall (s) | Keyframes |
+| --- | --- | ---: | ---: | ---: | ---: |
+| cars_moving_into_pothole (621 frames) | x86_64 | 7.70 | 2.57 | 80.65 | 14 |
+| cars_moving_into_pothole (621 frames) | aarch64 | 4.53 | 1.51 | 137.23 | 14 |
+| pothole_kumasi (420 frames) | x86_64 | 7.32 | 2.44 | 57.42 | 15 |
+| pothole_kumasi (420 frames) | aarch64 | 4.33 | 1.44 | 96.93 | 14 |
 
 ## Where the time goes (cars video, seconds per run)
 
@@ -34,19 +38,14 @@ the respective architecture. Raw JSON: `eval/results/bench_x86_pip_opencv.json` 
 
 Take-aways:
 
-- The classic OpenCV stages (decode, blur/Laplacian quality gate, ORB keyframe selection,
-  YuNet-based redaction) run at parity on 2 Graviton4 vCPUs vs 2 Xeon vCPUs — the aarch64 wheel
-  already ships the KleidiCV/carotene HAL for `imgproc`.
-- The only stage that regresses is `cv2.dnn` inference of the ~230 ms YOLO detector: 2.2x
-  slower on the stock aarch64 wheel. Because detection is ~60-75 % of wall time, the whole
-  pipeline ends up 0.59x, and Fargate's 20 % ARM discount does not recover it
-  ($0.0024 vs $0.0018 per 1,000 frames).
-- This is exactly the gap the Cloud-Optimized OpenCV Library (COOL) targets on Graviton.
-  We could not run COOL: it is only distributed as an AWS Marketplace AMI and subscribing was
-  blocked on this account (payment method not yet verified). The harness already supports it —
-  launch a COOL AMI, activate `/opt/cool/venvs/python_3.*`, and run
-  `python -m eval.bench_cool run --label graviton_cool ...`, then `compare` against
-  the JSON files above. Until then no COOL number is claimed anywhere in this repo.
+- In these runs, the listed classic OpenCV stages took similar time on the two
+  hosts. The recorded aarch64 build includes the KleidiCV/carotene HAL for `imgproc`.
+- The recorded DNN stage took about 2.2x as long on the Graviton host and the
+  end-to-end source throughput was about 0.59x the x86 host. Hardware, allocation,
+  and build differences prevent attributing these ratios solely to architecture.
+- COOL was not run. The historical attempt reported a blocked Marketplace
+  subscription; current account access was not checked. The harness can record
+  a future COOL run, but no COOL performance or cost improvement is established.
 
 ## Detector micro-benchmark
 
@@ -55,10 +54,14 @@ p95 **236.09 ms**, **4.34 images/s**. The Graviton run of this micro-benchmark i
 (the image bundle shipped to the instance contained dangling symlinks, so 0 images loaded);
 the per-stage `stage_detect_s` numbers above are the Graviton detector evidence.
 
-## Cost model
+## Cost evidence limits
 
-Hourly us-east-1 Linux Fargate list rates for 1 vCPU + 2 GB: x86
-`$0.04048 + 2 × $0.004445 = $0.04937/h`, ARM `$0.03238 + 2 × $0.00356 = $0.03950/h`
-([AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/)). Storage, data transfer and
-public IPv4 are excluded. The Graviton benchmark itself ran on one self-terminating
-`c8g.large` on-demand instance for 13 minutes (< $0.05).
+The old cost table multiplied these two-CPU host timings by one-vCPU Fargate
+rates. That does not establish Fargate cost per frame, so those estimates and
+the ARM discount conclusion have been removed. A defensible comparison needs
+matched task sizes, workload, builds, concurrency and current prices, plus
+explicit treatment of storage, ALB, network, IPv4 and idle time.
+
+`eval.bench_cool compare` omits costs by default. Explicit `--price-a` and
+`--price-b` rates produce labeled hypothetical compute-only estimates; they
+do not make these historical hosts comparable or establish a measured bill.

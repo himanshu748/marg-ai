@@ -20,9 +20,9 @@ This report is intentionally quantitative. The local detector evaluation on a
 600-image RDD2022 India slice reached 0.7390 mAP@0.5 and 0.8376 precision at
 the production threshold. The two licensed pothole videos compressed 21
 detections to four tracked instances and 96 detections to three instances.
-The AWS implementation is complete in code but is not yet live in the
-account used for this submission; all local pipeline, agent, API, and
-evaluation claims below were exercised locally.
+PR #5 recorded a September 7, 2026 AWS deployment, later removed for budget
+control. It does not verify the current patch. Evaluation figures below are
+historical local results, not current AWS, Bedrock, or COOL runtime evidence.
 
 ## Problem and impact
 
@@ -242,17 +242,17 @@ than using administrator permissions.
 
 The intended default is Graviton ARM64. `infra/deploy.sh` discovers the
 default VPC and subnets, builds with Docker Buildx, pushes to ECR, deploys the
-CloudFormation stack, and prints the dashboard URL. It contains an x86_64
-fallback when ARM64 binfmt or image construction is unavailable.
+CloudFormation stack, and prints the dashboard URL. X86_64 must be selected
+explicitly; a failed ARM64 build does not silently switch architectures.
 
-At the prototype scale, the requested cost estimate is approximately
-**$45/month**: Fargate 1 vCPU/2 GB ARM64 at approximately **$0.033/hour**,
-an ALB at approximately **$0.0225/hour plus LCU**, and modest S3, SQS,
-DynamoDB, ECR, and CloudWatch usage. This is an estimate, not a bill.
-Deployment is **not yet live**: account-level service activation blocked the
-previous deployment attempt. The CloudFormation and scripts remain in the
-repository for reproducibility; live endpoint verification is pending AWS
-activation.
+No current monthly cost or cost-per-frame estimate is established. A new
+estimate must include the selected task allocation, running hours, ALB and LCU,
+IPv4, storage, requests and transfer at current prices. Historical timings from
+unmatched two-CPU hosts cannot be priced as one-vCPU Fargate measurements;
+see `docs/BENCHMARK.md`.
+The historical stack was removed for budget control. The CloudFormation and
+scripts remain for reproducibility; redeployment requires separate approval
+and fresh endpoint and upload-to-completion checks.
 
 ## Evaluation
 
@@ -336,13 +336,13 @@ not intentionally identify people. Redaction is best-effort: small or distant
 plates and non-frontal faces can be missed. The human approval gate remains
 required, and privacy performance should be rechecked on each camera setup.
 
-The following claims are **verified locally**: OpenCV DNN inference, pipeline
+Historical local verification covered OpenCV DNN inference, pipeline
 tracking and evidence generation, MockLLM policy scenarios, auditor behavior,
 FastAPI dashboard/API tests, detector evaluation, deduplication measurement,
-privacy detector and redaction tests, the 22-test pytest suite, Ruff, and the
-rendered architecture image. The following remain **pending on AWS**:
-live CloudFormation deployment, ALB health checks, S3/SQS worker execution,
-Bedrock account access, and upload-to-done latency.
+privacy detector and redaction tests, pytest, Ruff, and the rendered architecture
+image. Rerun the README checks for the exact checkout being reviewed. The
+historical deployment record does not verify the current CloudFormation,
+ALB health, S3/SQS worker execution, Bedrock access, or upload-to-done latency.
 
 ## Future work
 

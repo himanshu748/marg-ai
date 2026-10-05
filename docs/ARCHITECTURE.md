@@ -23,6 +23,7 @@ evidence generation. The agent is deliberately approval-gated: it may draft a
 work order, but the dashboard's human decision is the final action.
 
 The AWS stack is defined in `infra/cloudformation.yaml` and built by
-`infra/deploy.sh`. AWS deployment has not yet been executed in this account;
-the diagram describes the implemented target architecture, while local
-pipeline, agent, API, and evaluation paths are verified.
+`infra/deploy.sh`. PR #5 recorded a September 7, 2026 deployment that was later
+removed for budget control; see the historical record in the README. The
+diagram describes the target architecture, not a currently running service.
+The current repair uses local and mocked-cloud verification only.

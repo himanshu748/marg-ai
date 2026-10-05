@@ -21,8 +21,6 @@ from marg.vision.pipeline import run as run_pipeline
 from .eval_detector import load_records
 
 DEFAULT_IMAGE_ROOT = Path("/home/ubuntu/assets/rdd2022_india")
-DEFAULT_PRICE_A = 0.04937
-DEFAULT_PRICE_B = 0.03950
 
 
 def _cpu_model() -> str:
@@ -195,19 +193,21 @@ def _video_map(benchmark: dict[str, Any]) -> dict[str, dict[str, Any]]:
 def build_comparison(
     a: dict[str, Any],
     b: dict[str, Any],
-    price_a: float,
-    price_b: float,
+    price_a: float | None = None,
+    price_b: float | None = None,
 ) -> str:
     rows = [
-        "# COOL benchmark comparison",
+        "# OpenCV benchmark comparison",
         "",
         (
-            "Prices are hourly Fargate prices for 1 vCPU + 2 GB in us-east-1: "
-            f"{a['label']} **${price_a:.5f}/h** and {b['label']} **${price_b:.5f}/h**. "
-            "Source: [AWS Fargate pricing](https://aws.amazon.com/fargate/pricing/)."
+            "Throughput ratios describe these recorded runs; unmatched hosts do not "
+            "isolate an architecture or library effect. Costs are omitted unless an hourly "
+            "rate is supplied, and then are hypothetical compute-only estimates, not "
+            "measured Fargate costs. Verify matching compute allocations before using them. "
+            "This comparison does not establish COOL runtime use."
         ),
         "",
-        "| Video | Label | Architecture | Source FPS | Median wall (s) | Detector median (ms) | Speedup B/A | Cost / 1,000 source frames |",
+        "| Video | Label | Architecture | Source FPS | Median wall (s) | Detector median (ms) | Observed FPS ratio B/A | Hypothetical cost / 1,000 source frames |",
         "| --- | --- | --- | ---: | ---: | ---: | ---: | ---: |",
     ]
     videos_a = _video_map(a)
@@ -222,12 +222,17 @@ def build_comparison(
             if item is None:
                 continue
             architecture = benchmark["environment"]["platform_machine"]
-            cost = price * float(item["wall_s"]) / 3600.0 / max(1, int(item["frames"])) * 1000
+            cost_text = "not estimated"
+            if price is not None:
+                cost = price * float(item["wall_s"]) / 3600.0 / max(1, int(item["frames"])) * 1000
+                cost_text = f"${cost:.6f} (${price:.5f}/h assumed)"
             speedup_text = "-" if speedup is None else f"{speedup:.2f}x"
+            detector = benchmark["detector"]
+            detector_median = f"{detector['median_ms']:.2f}" if detector["images"] else "not measured"
             rows.append(
                 f"| {name} | {benchmark['label']} | {architecture} | "
                 f"{item['fps_source']:.2f} | {item['wall_s']:.2f} | "
-                f"{benchmark['detector']['median_ms']:.2f} | {speedup_text} | ${cost:.6f} |"
+                f"{detector_median} | {speedup_text} | {cost_text} |"
             )
     rows.extend(
         [
@@ -238,11 +243,14 @@ def build_comparison(
     )
     for benchmark in (a, b):
         detector = benchmark["detector"]
+        timings = (
+            f"{detector['median_ms']:.2f} | {detector['p95_ms']:.2f} | {detector['images_per_second']:.2f}"
+            if detector["images"] else "not measured | not measured | not measured"
+        )
         rows.append(
             f"| RDD2022 first 200 images | {benchmark['label']} | "
             f"{benchmark['environment']['platform_machine']} | {detector['images']} | "
-            f"{detector['median_ms']:.2f} | {detector['p95_ms']:.2f} | "
-            f"{detector['images_per_second']:.2f} |"
+            f"{timings} |"
         )
     return "\n".join(rows) + "\n"
 
@@ -250,8 +258,8 @@ def build_comparison(
 def compare_benchmarks(
     first_path: Path,
     second_path: Path,
-    price_a: float,
-    price_b: float,
+    price_a: float | None,
+    price_b: float | None,
     out_path: Path,
 ) -> str:
     first = json.loads(first_path.read_text(encoding="utf-8"))
@@ -273,8 +281,8 @@ def main() -> None:
     compare_parser = subparsers.add_parser("compare")
     compare_parser.add_argument("first", type=Path)
     compare_parser.add_argument("second", type=Path)
-    compare_parser.add_argument("--price-a", type=float, default=DEFAULT_PRICE_A)
-    compare_parser.add_argument("--price-b", type=float, default=DEFAULT_PRICE_B)
+    compare_parser.add_argument("--price-a", type=float, help="Optional assumed hourly compute rate for the first host")
+    compare_parser.add_argument("--price-b", type=float, help="Optional assumed hourly compute rate for the second host")
     compare_parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "run":

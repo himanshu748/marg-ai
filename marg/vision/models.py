@@ -89,6 +89,9 @@ class SurveyResult(BaseModel):
     gpx: str | None = None
     geo_source: str
     frames: int
+    # Coordinate space for observations; absent in historical survey files.
+    frame_width: int | None = Field(default=None, gt=0)
+    frame_height: int | None = Field(default=None, gt=0)
     processed_frames: int
     keyframes: int
     detections: dict[str, int]

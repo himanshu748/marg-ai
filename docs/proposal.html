@@ -7,6 +7,7 @@ h1{font-size:20pt;margin:0 0 4px}h2{font-size:13pt;margin:18px 0 6px;border-bott
 pre{background:#f4f4f4;padding:8px;font-size:9pt;white-space:pre-wrap}ul{margin:4px 0 4px 18px}
 </style></head><body>
 <h1>MargAI — Agentic Road-Damage Survey from Dashcam Video</h1>
+<p><i>Archived proposal (August 2026). Status update: the Arm/Graviton path was benchmarked with stock OpenCV 5; COOL could not be run because the AWS Marketplace subscription was blocked on the account, so no COOL result is claimed — see docs/BENCHMARK.md.</i></p>
 <div class="sub">OpenCV AI Competition 2026 proposal · Team <b>MargAI</b> · Himanshu Kumar (solo) · India · a-9724@kmclu.ac.in · github.com/himanshu748/marg-ai</div>
 
 <h2>1. Problem statement and intended impact</h2>
@@ -28,14 +29,14 @@ pre{background:#f4f4f4;padding:8px;font-size:9pt;white-space:pre-wrap}ul{margin:
 <table><tr><th>Component</th><th>Service</th><th>Role</th></tr>
 <tr><td>Upload &amp; artefacts</td><td>Amazon S3</td><td>Survey videos, keyframes, crops, agent traces</td></tr>
 <tr><td>Job queue</td><td>Amazon SQS</td><td>Decouples uploads from processing</td></tr>
-<tr><td>Vision worker</td><td>Amazon ECS on AWS Fargate / EC2 Graviton (arm64)</td><td>Runs the OpenCV 5 pipeline; Arm path uses <b>COOL</b> for the core video workload, benchmarked against the x86 pip build (fps, latency, $/survey)</td></tr>
+<tr><td>Vision worker</td><td>Amazon ECS on AWS Fargate / EC2 Graviton (arm64)</td><td>Runs the OpenCV 5 pipeline; Arm path targets <b>COOL</b> for the core video workload, benchmarked against the x86 pip build (fps, latency, $/survey)</td></tr>
 <tr><td>Agent</td><td>Amazon Bedrock (Claude / Nova, Converse API tool-use)</td><td>Perception → decision → action loop with tools: inspect_roi, compare_frames, request_resurvey, draft_work_order, request_human_approval</td></tr>
 <tr><td>State</td><td>Amazon DynamoDB</td><td>Surveys, damage instances, work orders, audit trail of every tool call</td></tr>
 <tr><td>API &amp; dashboard</td><td>Application Load Balancer → FastAPI container</td><td>Public web endpoint: map of instances, crops, agent trace timeline, approve/reject</td></tr>
 <tr><td>Ops</td><td>CloudWatch, IAM least-privilege roles</td><td>Logs/metrics, observability of agent decisions</td></tr></table>
 
 <h2>4. Architecture</h2>
-<pre>Dashcam video + GPS ──▶ S3 ──▶ SQS ──▶ [ECS Graviton worker: OpenCV 5 (+COOL)]
+<pre>Dashcam video + GPS ──▶ S3 ──▶ SQS ──▶ [ECS Graviton worker: OpenCV 5 (COOL planned)]
    ingest → quality gate → ORB/homography keyframes → cv.dnn YOLO(RDD2022) → classical fusion
    → Farneback/IoU tracker → IPM severity → GPS clustering ──▶ DynamoDB (instances, segments)
                                                                      │

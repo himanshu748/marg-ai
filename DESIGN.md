@@ -1,5 +1,32 @@
 # MargAI — Agentic Road-Damage Survey (design)
 
+## Implemented review workspace
+
+The dashboard retains the original slate surfaces and teal action color. It is
+an operator workspace: a selected evidence frame sits beside the defect list;
+work orders and review activity have dedicated views. Mobile stacks evidence
+above the list and uses a keyboard-aware navigation drawer.
+
+- Typography: self-hosted Manrope, with tabular numerals for measurements.
+- Surfaces: background `#10171c`, navigation `#0c1217`, panels `#151f26`.
+- Text: primary `#edf4f6`, secondary `#a0b1bd`; action `#6adbc6`.
+- Meaning: amber denotes uncertainty and pending review; red denotes higher
+  severity or failure. Labels accompany color.
+- Evidence context: whole-survey keyframes clear defect-specific measurements;
+  selecting a defect restores its confidence, estimated area, and severity.
+- Truth: synthetic GPS, area estimates, deterministic reviews, unavailable
+  providers, and human-only decisions remain explicit. Approval records a local
+  decision; it does not dispatch a repair.
+- Runtime assets: fonts, icons, and Leaflet are served locally. The map basemap
+  is requested from OpenStreetMap only when its view is opened; evidence and
+  review remain usable without basemap access.
+- Interaction: native focus-trapped dialogs handle uploads, full evidence,
+  decisions, and workspace access. Hidden mobile navigation is inert. Job
+  status polls the durable job ID and does not infer success from old results.
+
+The original product and architecture notes below are retained as planning
+history. README.md and LOCAL_OPERATIONS.md describe current runtime behavior.
+
 Target: OpenCV AI Competition 2026 (AWS). Overall prize + Agentic Vision Award + Best Use of COOL Award.
 
 ## One-liner
