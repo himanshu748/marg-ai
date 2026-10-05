@@ -1818,3 +1818,33 @@ select {
 .selected-details.overview {
   display: block;
 }
+
+/* Evidence-to-decision guidance, within the existing slate and teal system. */
+.review-brief { display:flex; align-items:center; justify-content:space-between; gap:24px; padding:20px 22px; margin:18px 0; border:1px solid #335249; border-left:3px solid var(--accent); border-radius:var(--radius); background:linear-gradient(110deg,#172b27,var(--surface)); }
+.review-brief-copy { max-width:760px; }
+.eyebrow { color:var(--accent); text-transform:uppercase; letter-spacing:.13em; font-size:10px; font-weight:800; margin-bottom:4px; }
+.review-brief h3 { font-size:17px; }
+#nextStepDetail { color:var(--muted); font-size:12px; margin-top:5px; }
+.review-brief > button { flex-shrink:0; }
+.review-steps { display:flex; flex-wrap:wrap; gap:8px 18px; padding:0; margin:12px 0 0; list-style:none; color:var(--muted); font-size:11px; }
+.review-steps .complete { color:var(--accent); }
+.review-steps .current { color:var(--amber); }
+.outcome-filter-row { display:flex; align-items:center; justify-content:space-between; gap:10px; color:var(--muted); font-size:11px; padding:0 0 12px; }
+.outcome-filter-row select { max-width:65%; }
+.outcome-label { display:inline-block; color:var(--accent); }
+.outcome-label.dismissed { color:var(--muted); }
+.outcome-label.resurvey,.outcome-label.uncertain,.outcome-label.unreviewed { color:var(--amber); }
+.defect-row.dismissed .defect-thumb { opacity:.55; }
+.evidence-outcome { grid-column:1 / -1; border-top:1px solid var(--subtle-line); padding-top:12px; }
+.evidence-outcome p { color:var(--muted); font-size:11px; margin-top:4px; }
+.export-choices { display:grid; gap:12px; margin:24px 0; }
+.export-choice { width:100%; text-align:left; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:18px; }
+.export-choice strong { display:block; font-size:15px; margin-bottom:8px; }
+.export-choice strong span { float:right; color:var(--accent); font-size:11px; letter-spacing:.1em; }
+.export-choice small { display:block; color:var(--muted); line-height:1.7; }
+@media(max-width:700px) {
+  .review-brief { align-items:stretch; flex-direction:column; padding:16px; gap:15px; }
+  .review-brief h3 { font-size:16px; }
+  .review-steps { gap:6px 12px; font-size:10px; }
+  .review-brief > button { width:100%; }
+}

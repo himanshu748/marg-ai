@@ -271,9 +271,10 @@ uv pip compile pyproject.toml --extra api --extra dev --python-version 3.10 --un
 ```bash
 .venv/bin/ruff check .
 .venv/bin/python -m pytest -q
+node --test tests/*.cjs
 ```
 
-The same Ruff and pytest checks run on pushes and pull requests in GitHub
+The same Ruff, pytest, and Node built-in tests run on pushes and pull requests in GitHub
 Actions. Test counts change as coverage grows; use the command output from the
 checkout being reviewed. Local tests do not establish live AWS, Bedrock, or COOL
 Marketplace availability.

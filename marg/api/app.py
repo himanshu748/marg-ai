@@ -527,12 +527,14 @@ def create_app(data_root: Path | str) -> FastAPI:
                 )
             payload = agent_payload(directory)
             audit = payload.get("audit")
-            if payload.get("status", "completed") != "completed" or (
-                isinstance(audit, dict) and not audit.get("passed")
+            if (
+                payload.get("status") != "completed"
+                or not isinstance(audit, dict)
+                or audit.get("passed") is not True
             ):
                 raise HTTPException(
                     status_code=409,
-                    detail="This review did not complete successfully. Run a successful review before deciding.",
+                    detail="This review did not complete successfully. Run a fresh successful review before deciding.",
                 )
             orders = payload.get("work_orders", [])
             order = (

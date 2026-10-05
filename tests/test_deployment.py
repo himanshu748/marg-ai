@@ -37,6 +37,11 @@ def test_deploy_rejects_unsafe_configuration_before_aws(tmp_path: Path, settings
 
 
 def test_deploy_allows_token_authenticated_insecure_writes_to_reach_aws(tmp_path: Path) -> None:
+    # This checks admission to the AWS boundary, not template linting. Keep a
+    # globally installed cfn-lint from consuming this subprocess's time budget.
+    lint = tmp_path / "cfn-lint"
+    lint.write_text("#!/bin/sh\nexit 0\n")
+    lint.chmod(0o700)
     marker = tmp_path / "aws-called"
     aws = tmp_path / "aws"
     aws.write_text('#!/bin/sh\ntouch "$AWS_TEST_MARKER"\nexit 1\n')

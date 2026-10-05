@@ -215,3 +215,27 @@ bash -n infra/deploy.sh
 
 These checks verify local behavior and template schema. They do not verify an AWS
 deployment, the DNS/certificate pairing, provider access, or live account quotas.
+
+
+## Review outcomes and evidence reports
+
+The survey header identifies the next step: run a checked review, decide pending
+work orders, or inspect outstanding evidence. Both the API and workspace require
+an explicit completed review and a passing policy audit before approval or
+rejection. Legacy demo reviews without those fields need a fresh local review.
+
+The unresolved evidence count follows successful review outcomes. Dismissed
+observations remain available for audit, while confirmed evidence and recorded
+work-order decisions receive their own labels. The outcome filter can show
+work-order evidence even when the same defect also has a resurvey request.
+
+**Export report** offers complete JSON data and a self-contained HTML report.
+The HTML includes every defect in its table and up to 12 public evidence images
+(2 MiB per image, 8 MiB combined before base64 encoding). Missing or oversized
+images are labeled; private raw evidence is not fetched. Open the file in a
+browser and print to PDF when needed. Exports preserve provider provenance,
+policy results, decisions, and synthetic-location and measurement limitations.
+Review imagery for privacy before sharing.
+
+The report and outcome logic use Node's built-in test runner, with no JavaScript
+package installation: `node --test tests/*.cjs` (Node 22 in CI).

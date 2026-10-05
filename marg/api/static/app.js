@@ -118,6 +118,23 @@ function isReadonly() {
     (state.caps.authentication_required && !state.authenticated)
   );
 }
+function reviewState() {
+  return MargReview.summary(state.result, state.agent);
+}
+function renderReviewBrief() {
+  if (!state.result) return;
+  const s = reviewState();
+  $("nextStepTitle").textContent = state.busy ? "Review work is in progress" : s.next.title;
+  $("nextStepDetail").textContent = state.busy ? "Keep exploring the saved evidence. Decisions unlock after the review completes and its policy checks pass." : s.next.detail;
+  $("nextStepAction").textContent = s.next.label;
+  $("nextStepAction").disabled = state.busy || (s.next.action === "review" && isReadonly());
+  $("stepEvidence").className = "complete";
+  $("stepReview").className = s.valid ? "complete" : "current";
+  $("stepReview").textContent = s.valid ? "2 · Policy checks passed" : "2 · Checked review needed";
+  $("stepDecision").className = s.pending ? "current" : s.valid ? "complete" : "";
+  $("stepDecision").textContent = s.pending ? `3 · ${s.pending} awaiting decision` : s.valid ? `3 · ${s.decided} decisions recorded` : "3 · Human decision";
+  $("surveyStatus").textContent = state.busy ? "Review in progress" : !s.valid ? "Review required" : s.pending ? "Decision required" : "Review checked";
+}
 function applyCapabilities() {
   const c = state.caps;
   if (!c) return;
@@ -143,14 +160,17 @@ function applyCapabilities() {
   if ((c.agent?.modes || ["mock"]).includes(chosenMode))
     $("reviewMode").value = chosenMode;
   $("reviewMode").disabled = isReadonly() || state.busy;
+  $("exportButton").disabled = !state.result || state.busy;
   document
     .querySelectorAll("[data-decision]")
-    .forEach((button) => (button.disabled = isReadonly() || state.busy));
+    .forEach((button) => (button.disabled = isReadonly() || state.busy || !MargReview.validReview(state.agent)));
   $("reviewDescription").textContent = c.read_only
     ? "This workspace is read-only. Existing evidence and review records are available to inspect."
     : "Run a deterministic review to inspect uncertainty and prepare work orders.";
   $("videoHint").textContent =
     `MP4, MOV, AVI, MKV or WebM · up to ${number((c.uploads?.max_video_bytes || 268435456) / 1048576)} MB`;
+  $("videoFile").accept = (c.uploads?.accepted_video_extensions || [".mp4", ".mov", ".avi", ".mkv", ".webm"]).join(",");
+  renderReviewBrief();
 }
 function switchView(view) {
   state.view = view;
@@ -221,6 +241,12 @@ async function optional(path) {
 }
 async function selectSurvey(id) {
   const seq = ++state.sequence;
+  if (id !== state.id) {
+    $("searchDefects").value = "";
+    $("outcomeFilter").value = "all";
+    state.uncertain = false;
+    $("uncertainFilter").setAttribute("aria-pressed", "false");
+  }
   state.id = id;
   const selectedUrl = new URL(location.href);
   selectedUrl.searchParams.set("survey", id);
@@ -269,7 +295,7 @@ async function selectSurvey(id) {
     state.trace = trace || [];
     state.selected =
       [...result.instances].sort(
-        (a, b) => b.severity - a.severity || a.id - b.id,
+        (a, b) => Number(MargReview.outcome(a, agent, result).code === "dismissed") - Number(MargReview.outcome(b, agent, result).code === "dismissed") || b.severity - a.severity || a.id - b.id,
       )[0]?.id ?? null;
     $("surveyWorkspace").hidden = false;
     $("surveyName").textContent = titleFor(
@@ -325,26 +351,26 @@ function providerLabel() {
 function updateMetrics() {
   const r = state.result;
   if (!r) return;
-  const pending = (state.agent?.work_orders || []).filter(
-    (o) => o.status === "pending_approval",
-  ).length;
+  const s = reviewState(), pending = s.pending;
   $("metricDefects").textContent = number(r.instances.length);
   $("metricDetections").textContent =
     `From ${number(Object.values(r.detections).reduce((a, b) => a + Number(b), 0))} frame detections`;
-  $("metricUncertain").textContent = number(
-    r.instances.filter((i) => i.fused_conf < 0.55).length,
-  );
+  $("metricUncertain").textContent = number(s.unresolved);
+  $("metricReviewDetail").textContent = s.valid ? `${s.dismissed} dismissed · ${s.resurveys} resurveys` : "Low confidence · review needed";
   $("metricOrders").textContent = number(pending);
   $("navOrderCount").textContent = number(pending);
   $("metricRuntime").textContent = `${number(r.metrics.runtime_s, 1)}s`;
   $("metricFrames").textContent = `${number(r.frames)} source frames`;
+  renderReviewBrief();
 }
 function filteredDefects() {
   const query = $("searchDefects").value.toLowerCase().trim();
+  const outcomes = reviewState().outcomes;
   return [...(state.result?.instances || [])]
     .filter(
       (i) =>
-        (!state.uncertain || i.fused_conf < 0.55) &&
+        (!state.uncertain || outcomes.get(i.id)?.needsReview) &&
+        MargReview.matchesOutcome(i, state.agent, state.result, $("outcomeFilter").value) &&
         `${classNames[i.class_name] || i.class_name} ${i.class_name} ${idLabel(i.id)} ${i.id}`
           .toLowerCase()
           .includes(query),
@@ -359,12 +385,13 @@ function filteredDefects() {
 }
 function renderDefects() {
   const defects = filteredDefects();
+  const outcomes = reviewState().outcomes;
   $("defectCount").textContent = number(defects.length);
   $("defectList").innerHTML = defects.length
     ? defects
         .map(
           (i) =>
-            `<button class="defect-row ${i.id === state.selected ? "active" : ""}" data-defect="${i.id}" aria-pressed="${i.id === state.selected}">${i.evidence_path ? `<img class="defect-thumb" src="${media("evidence", i.evidence_path)}" alt="" loading="lazy">` : `<span class="defect-thumb"></span>`}<span class="defect-info"><strong>${esc(classNames[i.class_name] || i.class_name)} ${idLabel(i.id)}</strong><small class="${i.fused_conf < 0.55 ? "uncertain" : ""}">${i.fused_conf < 0.55 ? "Needs close review" : `${number(i.keyframe_ids.length)} keyframe observation${i.keyframe_ids.length === 1 ? "" : "s"}`}</small></span><span class="defect-meta">${severity(i.severity)}<small>${number(i.fused_conf * 100)}% confidence</small></span></button>`,
+            `<button class="defect-row ${outcomes.get(i.id).code} ${i.id === state.selected ? "active" : ""}" data-defect="${i.id}" aria-pressed="${i.id === state.selected}">${i.evidence_path ? `<img class="defect-thumb" src="${media("evidence", i.evidence_path)}" alt="" loading="lazy">` : `<span class="defect-thumb"></span>`}<span class="defect-info"><strong>${esc(classNames[i.class_name] || i.class_name)} ${idLabel(i.id)}</strong><small class="outcome-label ${outcomes.get(i.id).code}">${esc(outcomes.get(i.id).label)}</small></span><span class="defect-meta">${severity(i.severity)}<small>${number(i.fused_conf * 100)}% confidence</small></span></button>`,
         )
         .join("")
     : empty(
@@ -372,7 +399,7 @@ function renderDefects() {
           ? "No matching defects"
           : "No defects detected",
         state.result?.instances.length
-          ? "Try another search or clear the “Needs review” filter."
+          ? "Try another search or clear the review and outcome filters."
           : "This survey did not retain road-damage instances. You can still inspect its keyframes and review activity.",
       );
 }
@@ -427,6 +454,10 @@ function renderEvidence() {
   $("imageBadge").textContent = `${i.class_name} · severity ${i.severity}/5`;
   $("selectedDetails").innerHTML =
     `<div><span>Fused confidence</span><strong>${number(i.fused_conf * 100)}%</strong><small>${i.fused_conf < 0.55 ? "Close inspection required" : "Review alongside evidence"}</small></div><div><span>Estimated area</span><strong>${number(i.area_m2, 2)} m²</strong><small>Assumed road plane</small></div><div><span>Severity</span><strong>${number(i.severity)} <small>/ 5</small></strong><small>${i.severity >= 4 ? "High priority for review" : i.severity === 3 ? "Moderate damage" : "Lower severity"}</small></div>`;
+  const o = MargReview.outcome(i, state.agent, r);
+  $("selectedDetails").firstElementChild.querySelector("small").textContent = o.needsReview ? "Unresolved evidence" : "Detection confidence · before review";
+  if (o.code === "dismissed") $("selectedDetails").children[2].lastElementChild.textContent = "Detection estimate · dismissed";
+  $("selectedDetails").insertAdjacentHTML("beforeend", `<div class="evidence-outcome"><strong class="outcome-label ${o.code}">${esc(o.label)}</strong><p>${esc(o.detail)}</p></div>`);
   document
     .querySelectorAll(".frame-thumb")
     .forEach((b) => b.classList.remove("active"));
@@ -538,7 +569,7 @@ function renderOrders() {
             : o.status === "review_blocked"
               ? "Review blocked"
               : titleFor(o.status);
-      return `<article class="order"><div><div class="order-meta"><span class="severity ${o.priority === "high" ? "high" : o.priority === "medium" ? "medium" : ""}">${esc(titleFor(o.priority))} priority</span><span>Segment ${esc(Number(o.segment_id) + 1)}</span><span>${esc(String(o.work_order_id).slice(0, 8))}</span></div><h4>${esc(o.title || o.summary || "Road repair work order")}</h4><p>${esc(o.reason || o.summary)}</p><div class="order-evidence">${(o.instances || []).map((i) => `<button data-order-evidence="${esc(i.evidence || "")}" data-evidence-title="${esc((classNames[i.class] || i.class) + " " + idLabel(i.id))}" ${!i.evidence ? "disabled" : ""}>${i.evidence ? `<img src="${media("evidence", i.evidence)}" alt="${esc(classNames[i.class] || i.class)} evidence" loading="lazy">` : ""}<span>${idLabel(i.id)} · severity ${esc(i.severity)}/5</span></button>`).join("")}</div></div><div class="order-decision"><strong class="${approved ? "status-approved" : rejected ? "status-rejected" : "status-pending"}">${status}</strong><p>${approved ? "Approved in this workspace. No repair has been dispatched." : rejected ? "This work order will not proceed." : pending ? "Inspect the evidence and record your decision." : "Complete a valid review before making a decision."}</p>${o.decision_note ? `<p class="decision-note">${esc(o.decision_note)}</p>` : ""}${o.decided_at ? `<p>${esc(new Date(o.decided_at).toLocaleString())}</p>` : ""}${pending ? `<div class="decision-actions"><button class="button primary" data-decision="approve" data-order="${esc(o.work_order_id)}" ${isReadonly() || state.busy ? "disabled" : ""}>Approve</button><button class="button quiet" data-decision="reject" data-order="${esc(o.work_order_id)}" ${isReadonly() || state.busy ? "disabled" : ""}>Reject</button></div>${isReadonly() ? "<p>Read-only workspace</p>" : ""}` : ""}</div></article>`;
+      return `<article class="order"><div><div class="order-meta"><span class="severity ${o.priority === "high" ? "high" : o.priority === "medium" ? "medium" : ""}">${esc(titleFor(o.priority))} priority</span><span>Segment ${esc(Number(o.segment_id) + 1)}</span><span>${esc(String(o.work_order_id).slice(0, 8))}</span></div><h4>${esc(o.title || o.summary || "Road repair work order")}</h4><p>${esc(o.reason || o.summary)}</p><div class="order-evidence">${(o.instances || []).map((i) => `<button data-order-evidence="${esc(i.evidence || "")}" data-evidence-title="${esc((classNames[i.class] || i.class) + " " + idLabel(i.id))}" ${!i.evidence ? "disabled" : ""}>${i.evidence ? `<img src="${media("evidence", i.evidence)}" alt="${esc(classNames[i.class] || i.class)} evidence" loading="lazy">` : ""}<span>${idLabel(i.id)} · severity ${esc(i.severity)}/5</span></button>`).join("")}</div></div><div class="order-decision"><strong class="${approved ? "status-approved" : rejected ? "status-rejected" : "status-pending"}">${status}</strong><p>${approved ? "Approved in this workspace. No repair has been dispatched." : rejected ? "This work order will not proceed." : pending && MargReview.validReview(state.agent) ? "Inspect the evidence and record your decision." : "Complete a valid review before making a decision."}</p>${o.decision_note ? `<p class="decision-note">${esc(o.decision_note)}</p>` : ""}${o.decided_at ? `<p>${esc(new Date(o.decided_at).toLocaleString())}</p>` : ""}${pending ? `<div class="decision-actions"><button class="button primary" data-decision="approve" data-order="${esc(o.work_order_id)}" ${isReadonly() || state.busy || !MargReview.validReview(state.agent) ? "disabled" : ""}>Approve</button><button class="button quiet" data-decision="reject" data-order="${esc(o.work_order_id)}" ${isReadonly() || state.busy || !MargReview.validReview(state.agent) ? "disabled" : ""}>Reject</button></div>${isReadonly() ? "<p>Read-only workspace</p>" : ""}` : ""}</div></article>`;
     })
     .join("");
 }
@@ -604,9 +635,10 @@ function renderTrace() {
   $("traceExport").disabled = !state.trace.length;
 }
 function exportJson(filename, data) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], {
-    type: "application/json",
-  });
+  downloadFile(filename, JSON.stringify(data, null, 2), "application/json");
+}
+function downloadFile(filename, content, type) {
+  const blob = new Blob([content], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -737,6 +769,11 @@ async function uploadSurvey(event) {
     gpx = $("gpxFile").files[0];
   const caps = state.caps.uploads;
   if (!video) return;
+  const extension = video.name.slice(video.name.lastIndexOf(".")).toLowerCase();
+  if (!caps.accepted_video_extensions.includes(extension))
+    return formError("uploadError", "Choose an MP4, MOV, AVI, MKV or WebM video.");
+  if (gpx && !gpx.name.toLowerCase().endsWith(".gpx"))
+    return formError("uploadError", "Choose a timestamped .gpx track.");
   if (video.size > caps.max_video_bytes)
     return formError(
       "uploadError",
@@ -776,7 +813,7 @@ function openDecision(orderId, decision) {
   const order = state.agent?.work_orders.find(
     (o) => o.work_order_id === orderId,
   );
-  if (!order || isReadonly()) return;
+  if (!order || isReadonly() || state.busy || !MargReview.validReview(state.agent)) return;
   state.decision = { orderId, decision, surveyId: state.id };
   $("decisionTitle").textContent =
     decision === "approve" ? "Approve work order" : "Reject work order";
@@ -812,6 +849,8 @@ async function submitDecision(event) {
       );
       updateMetrics();
       renderOrders();
+      renderDefects();
+      renderEvidence();
     }
     toast(
       d.decision === "approve"
@@ -921,6 +960,15 @@ $("uncertainFilter").addEventListener("click", () => {
   $("uncertainFilter").setAttribute("aria-pressed", String(state.uncertain));
   renderDefects();
 });
+$("nextStepAction").addEventListener("click", () => {
+  const action = reviewState().next.action;
+  if (action === "review") runReview();
+  else {
+    if (action === "orders") { $("orderFilter").value = "pending_approval"; renderOrders(); }
+    switchView(action);
+  }
+});
+$("outcomeFilter").addEventListener("change", renderDefects);
 $("searchDefects").addEventListener("input", renderDefects);
 $("sortDefects").addEventListener("change", renderDefects);
 $("orderFilter").addEventListener("change", renderOrders);
@@ -998,18 +1046,74 @@ $("videoDrop").addEventListener("drop", (event) => {
   }
 });
 $("exportButton").addEventListener("click", () => {
-  if (state.result)
-    exportJson(`margai-${state.id}-report.json`, {
-      exported_at: new Date().toISOString(),
-      location_notice:
-        state.result.geo_source === "synthetic"
-          ? "Synthetic coordinates; do not use for dispatch."
-          : "Field location verification required.",
-      estimate_notice:
-        "Area and severity are estimates; field verification required.",
-      survey: state.result,
-      review: state.agent,
+  if (!state.result || state.busy) return;
+  $("exportError").hidden = true;
+  $("exportStatus").hidden = true;
+  showDialog("exportDialog");
+});
+$("exportData").addEventListener("click", () => {
+  if (!state.result) return;
+  exportJson(`margai-${state.id}-report.json`, {
+    exported_at: new Date().toISOString(),
+    location_notice: state.result.geo_source === "synthetic"
+      ? "Synthetic coordinates; do not use for dispatch." : "Field location verification required.",
+    estimate_notice: "Area and severity are estimates; field verification required.",
+    survey: state.result, review: state.agent,
+  });
+});
+async function embeddedEvidence(url, remaining) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const response = await fetch(url, { credentials: "same-origin", signal: controller.signal });
+    const mime = response.headers.get("content-type")?.split(";")[0];
+    if (!response.ok || !["image/jpeg", "image/png"].includes(mime)) return null;
+    const limit = Math.min(2 * 1024 * 1024, remaining);
+    const reader = response.body.getReader();
+    const chunks = [];
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limit) { await reader.cancel(); return null; }
+      chunks.push(value);
+    }
+    const blob = new Blob(chunks, { type: mime });
+    const data = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
     });
+    return { data, size };
+  } catch { return null; }
+  finally { clearTimeout(timeout); }
+}
+$("exportReadable").addEventListener("click", async () => {
+  if (!state.result || state.busy) return;
+  const survey = structuredClone(state.result), review = structuredClone(state.agent);
+  const surveyId = state.id, surveyName = $("surveyName").textContent;
+  const outcomes = Object.fromEntries([...MargReview.summary(survey, review).outcomes].map(([id, outcome]) => [id, outcome.label]));
+  $("exportReadable").disabled = true;
+  $("exportData").disabled = true;
+  $("exportError").hidden = true;
+  $("exportStatus").hidden = false;
+  $("exportStatus").textContent = "Preparing the report and embedding public evidence…";
+  try {
+    const images = {};
+    let remaining = 8 * 1024 * 1024;
+    for (const instance of survey.instances.slice(0, 12)) {
+      if (!instance.evidence_path || remaining <= 0) continue;
+      const image = await embeddedEvidence(media("evidence", instance.evidence_path, surveyId), remaining);
+      if (image) { images[instance.id] = image.data; remaining -= image.size; }
+    }
+    const html = MargReport.buildReport({ survey, review, surveyId, surveyName,
+      exportedAt: new Date().toISOString(), images, outcomes });
+    downloadFile(`margai-${surveyId}-report.html`, html, "text/html");
+    $("exportStatus").textContent = `Report download requested with ${Object.keys(images).length} embedded images. Open it in your browser to read or print to PDF. Missing images are labeled in the report.`;
+  } catch (error) { formError("exportError", `Report could not be prepared. ${error.message}`); }
+  finally { $("exportReadable").disabled = false; $("exportData").disabled = false; }
 });
 $("traceExport").addEventListener("click", () =>
   exportJson(`margai-${state.id}-activity.json`, {

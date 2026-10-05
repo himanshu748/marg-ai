@@ -11,9 +11,11 @@
     <title>MargAI — Survey review</title>
     <link rel="icon" href="/static/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/vendor/leaflet.css" />
-    <link rel="stylesheet" href="/static/app.css" />
+    <link rel="stylesheet" href="/static/app.css?v=review-experience-1" />
     <script src="/static/vendor/leaflet.js" defer></script>
-    <script src="/static/app.js" defer></script>
+    <script src="/static/review-model.js" defer></script>
+    <script src="/static/report.js" defer></script>
+    <script src="/static/app.js?v=review-experience-1" defer></script>
   </head>
   <body>
     <!-- MargAI survey workbench. Operate mode: preserve the existing dark slate and teal identity; foreground recorded evidence and explicit human decisions. The first viewport joins one selected frame with a scannable defect list. Location, estimates, and provider provenance stay visible. No live-inference claim without runtime evidence. -->
@@ -148,15 +150,28 @@
                 <svg><use href="#i-download" /></svg>Export report
               </button>
             </section>
+            <section id="reviewBrief" class="review-brief" aria-label="Review progress">
+              <div class="review-brief-copy">
+                <p class="eyebrow">Your next step</p>
+                <h3 id="nextStepTitle">Inspect the survey evidence</h3>
+                <p id="nextStepDetail"></p>
+                <ol class="review-steps" aria-label="Review stages">
+                  <li id="stepEvidence">1 · Evidence available</li>
+                  <li id="stepReview">2 · Review needed</li>
+                  <li id="stepDecision">3 · Human decision</li>
+                </ol>
+              </div>
+              <button id="nextStepAction" class="button primary">Run review</button>
+            </section>
             <section class="metrics" aria-label="Survey summary">
               <div>
                 <span>Unique defects</span><strong id="metricDefects">—</strong
                 ><small id="metricDetections"></small>
               </div>
               <div>
-                <span>Needs close review</span
+                <span>Unresolved evidence</span
                 ><strong id="metricUncertain">—</strong
-                ><small>Confidence below 55%</small>
+                ><small id="metricReviewDetail">Review required</small>
               </div>
               <div>
                 <span>Awaiting approval</span
@@ -261,6 +276,15 @@
                       Needs review
                     </button>
                   </div>
+                  <div class="outcome-filter-row">
+                    <label for="outcomeFilter">Review outcome</label>
+                    <select id="outcomeFilter">
+                      <option value="all">All evidence</option>
+                      <option value="ordered">In work orders</option>
+                      <option value="dismissed">Dismissed by review</option>
+                      <option value="resurvey">Resurvey requested</option>
+                    </select>
+                  </div>
                   <div id="defectList" class="defect-list"></div>
                   <div class="review-action">
                     <div>
@@ -352,7 +376,7 @@
           >Survey name <span class="optional">Optional</span
           ><input
             name="name"
-            maxlength="120"
+            maxlength="100"
             placeholder="e.g. Ring Road, morning survey" /></label
         ><label class="file-drop" id="videoDrop"
           ><svg><use href="#i-upload" /></svg
@@ -362,11 +386,11 @@
             id="videoFile"
             name="video"
             type="file"
-            accept=".mp4,.mov,.avi,.mkv,.webm,.ogv,.mpeg,.mpg"
+            accept=".mp4,.mov,.avi,.mkv,.webm"
             required /></label
         ><label class="field"
-          >GPS track <span class="optional">Optional · GPX or SRT</span
-          ><input id="gpxFile" name="gpx" type="file" accept=".gpx,.srt"
+          >GPS track <span class="optional">Optional · timestamped GPX</span
+          ><input id="gpxFile" name="gpx" type="file" accept=".gpx"
         /></label>
         <p class="form-note">
           Without a GPS track, locations are synthetic and will be labelled
@@ -381,6 +405,20 @@
           </button>
         </div>
       </form>
+    </dialog>
+    <dialog id="exportDialog" class="dialog" aria-labelledby="exportTitle">
+      <div class="dialog-heading">
+        <h2 id="exportTitle">Export survey report</h2>
+        <button type="button" data-close="exportDialog" class="icon-button" aria-label="Close export"><svg><use href="#i-close" /></svg></button>
+      </div>
+      <p class="muted">Keep the evidence, policy checks, and recorded decisions together.</p>
+      <div class="export-choices">
+        <button id="exportReadable" class="export-choice"><strong>Readable report <span>HTML</span></strong><small>Self-contained report with up to 12 evidence images. Open in a browser to read or print to PDF.</small></button>
+        <button id="exportData" class="export-choice"><strong>Structured data <span>JSON</span></strong><small>Complete survey and review data for analysis or an audit trail.</small></button>
+      </div>
+      <p class="form-note">Locations and measurements retain their limitations. Review imagery for privacy before sharing.</p>
+      <div id="exportStatus" class="form-note" role="status" hidden></div>
+      <div id="exportError" class="form-error" role="alert" hidden></div>
     </dialog>
     <dialog id="decisionDialog" class="dialog" aria-labelledby="decisionTitle">
       <form id="decisionForm">

@@ -183,7 +183,11 @@ def run(
             if best_observation is not None
             else track.bbox
         )
-        area = bbox_area_m2(best_bbox, config.target_width, int(config.target_width * 9 / 16), config)
+        # The best box is measured in its own evidence frame's pixels. A resize
+        # target or a later frame can have different dimensions and calibration.
+        best_frame = best_frames[track.instance_id]
+        best_height, best_width = best_frame.shape[:2]
+        area = bbox_area_m2(best_bbox, best_width, best_height, config)
         instance = SurveyInstance(
             id=track.instance_id,
             bbox=[float(value) for value in best_bbox],
@@ -205,14 +209,14 @@ def run(
         crop_path = output_dir / "crops" / f"inst_{track.instance_id:04d}.jpg"
         if config.redact:
             redactions += _save_crop(
-                best_frames.get(track.instance_id),
+                best_frame,
                 best_bbox,
                 crop_path,
                 redact_output=True,
                 sensitive_regions=best_sensitive_regions.get(track.instance_id),
             )
         else:
-            _save_crop(best_frames.get(track.instance_id), best_bbox, crop_path)
+            _save_crop(best_frame, best_bbox, crop_path)
         if crop_path.exists():
             crop_paths.append(str(crop_path.relative_to(output_dir)))
     segments = cluster_instances(instances, config.geo_cluster_radius_m)

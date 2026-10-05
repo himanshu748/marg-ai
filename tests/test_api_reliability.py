@@ -256,22 +256,54 @@ def test_new_run_does_not_inherit_stale_human_decision(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "status,audit", [("failed", True), ("unavailable", True), ("completed", False)]
+    "review",
+    [
+        {},
+        {"status": "completed"},
+        {"audit": {"passed": True}},
+        {"status": "failed", "audit": {"passed": True}},
+        {"status": "unavailable", "audit": {"passed": True}},
+        {"status": "completed", "audit": None},
+        {"status": "completed", "audit": {}},
+        {"status": "completed", "audit": {"passed": False}},
+        {"status": "completed", "audit": {"passed": "true"}},
+        {"status": "completed", "audit": {"passed": 1}},
+        {"status": "completed", "audit": []},
+    ],
 )
-def test_incomplete_review_cannot_be_approved(tmp_path, status, audit):
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_incomplete_review_cannot_receive_decision(tmp_path, review, decision):
     directory = write_survey(tmp_path)
     path = directory / "agent" / "agent_result.json"
     payload = json.loads(path.read_text())
-    payload.update(status=status, audit={"passed": audit})
+    payload.pop("status")
+    payload.pop("audit")
+    payload.update(review)
     path.write_text(json.dumps(payload))
     with TestClient(create_app(tmp_path)) as client:
-        assert (
-            client.post(
-                "/api/surveys/demo/work_orders/wo-0/decision",
-                json={"decision": "approve"},
-            ).status_code
-            == 409
+        response = client.post(
+            "/api/surveys/demo/work_orders/wo-0/decision",
+            json={"decision": decision},
         )
+        assert response.status_code == 409
+        assert "successful review" in response.json()["detail"]
+    assert not (directory / "agent" / "decisions.json").exists()
+    assert json.loads(path.read_text()) == payload
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_completed_review_with_passing_audit_allows_decision(tmp_path, decision):
+    directory = write_survey(tmp_path)
+    with TestClient(create_app(tmp_path)) as client:
+        response = client.post(
+            "/api/surveys/demo/work_orders/wo-0/decision",
+            json={"decision": decision},
+        )
+        assert response.status_code == 200
+        assert response.json()["decision"] == decision
+    saved = json.loads((directory / "agent" / "decisions.json").read_text())["wo-0"]
+    assert saved["decision"] == decision
+    assert saved["agent_run_id"] == "run-a"
 
 
 def test_media_and_result_symlinks_cannot_escape(tmp_path):
