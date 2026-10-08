@@ -2,14 +2,30 @@
 
 # MargAI
 
-MargAI is an OpenCV road-damage survey agent. It processes dashcam video,
-detects RDD2022 cracks and potholes, tracks observations into instances,
-retains evidence frames, and uses an approval-gated agent to draft
-municipal work orders.
+**Turn a dashcam drive into a reviewed list of road repairs.** MargAI runs an
+OpenCV 5 pipeline over dashcam video to find cracks and potholes, merges repeat
+sightings of the same defect, keeps privacy-redacted evidence frames, and lets
+an approval-gated agent draft municipal work orders that a person must approve.
+
+Entry for the **OpenCV AI Competition 2026, powered by AWS**. Final submissions are due 26 October 2026, 23:59 PT
+(27 October, 12:29 IST).
 
 The local workbench supports video upload, evidence review, policy traces, and
 human decisions while Bedrock access is pending. Its default review mode is
 deterministic; it does not claim live model reasoning.
+
+## For judges
+
+| What | Where |
+| --- | --- |
+| Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
+| Architecture diagram | [docs/architecture.png](docs/architecture.png) ([SVG](docs/architecture.svg), [notes](docs/ARCHITECTURE.md)) |
+| Demo video (≤5 min) | _add the public or unlisted link_ |
+| Live endpoint | _not currently deployed; the 2026-09-07 AWS stack was torn down (see [AWS deployment](#aws-deployment))_ |
+| Evaluation and failure cases | [Evaluation and tests](#evaluation-and-tests), [docs/BENCHMARK.md](docs/BENCHMARK.md), [docs/failures/](docs/failures/) |
+| Pinned dependencies | [constraints/api.txt](constraints/api.txt) (runtime) and [constraints/dev.txt](constraints/dev.txt) (tests), resolved for Python 3.10+ |
+
+![Annotated pothole survey](docs/samples/pothole_cars_annotated.gif)
 
 ## Architecture
 
@@ -39,9 +55,19 @@ required for new surveys and agent inspections. See [model attribution](models/L
 The package uses the headless OpenCV wheel in both local and container installs;
 the dashboard and file renderer do not need desktop GUI bindings.
 
+The models are stored with **Git LFS**. A clone without LFS leaves ~130-byte
+pointer files in `models/` and every survey fails to load the detector, so
+fetch them first:
+
+```bash
+git lfs install && git lfs pull          # models/*.onnx should be 0.2 MB, 4 MB and 45 MB
+```
+
+Install with the pinned constraints (the same versions CI and the Docker image use):
+
 ```bash
 python3 -m venv .venv
-.venv/bin/python -m pip install -e '.[api,dev]'
+.venv/bin/python -m pip install -c constraints/dev.txt -e '.[api,dev]'
 .venv/bin/python -c "import shutil; shutil.copytree('demo', 'outputs/workbench')"
 env -u MARG_S3_BUCKET -u MARG_SQS_QUEUE_URL \
   MARG_DATA_ROOT=outputs/workbench MARG_READ_ONLY=0 \
@@ -56,6 +82,9 @@ choose a new output directory. Keep the tracked `demo/` fixtures unchanged.
 Upload a video with optional timestamped GPX. Without GPX, the interface labels
 the location as synthetic. Processing and deterministic review run locally with
 observable job status. Set `MARG_READ_ONLY=1` for a view-only workspace.
+
+All environment variables are listed with their defaults in [.env.example](.env.example).
+The app reads real environment variables only; load the file with `set -a; . ./.env; set +a`.
 
 See [local operations and the API contract](LOCAL_OPERATIONS.md) for authentication,
 limits, persistence, failure handling, and future AWS deployment requirements.
@@ -182,6 +211,17 @@ The historical privacy-enabled demo runs recorded 21 redactions for
 Per-instance observation counts are `[2, 1, 4, 14]` for `pothole_cars` and
 `[62, 32, 2]` for `pothole_kumasi`. Full output is in
 `eval/results/dedupe.md`.
+
+### Updating pinned dependencies
+
+`pyproject.toml` keeps compatible ranges; `constraints/*.txt` pin every
+transitive package (tested on Python 3.10 and 3.12). Regenerate them after changing
+dependencies, then re-run the tests:
+
+```bash
+uv pip compile pyproject.toml --extra api --python-version 3.10 --universal -o constraints/api.txt
+uv pip compile pyproject.toml --extra api --extra dev --python-version 3.10 --universal -o constraints/dev.txt
+```
 
 ### Run the test suite / CI
 
