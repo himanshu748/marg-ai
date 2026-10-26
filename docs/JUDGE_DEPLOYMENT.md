@@ -65,3 +65,12 @@ Validate the complete proxy configuration before graceful reload, preserve other
 HTTPS `/api/health` retains `read_only: true` for recorded surveys and `bedrock_enabled: false`. `/api/capabilities` separately reports `live_reviews.enabled`, exact model and remaining allowance. Choose Open live review, then Run live review; inspect real provider receipts, OpenCV tools and passing audit, save a sample decision and reload. A separate session must receive 404 for the private job; the original recorded-agent write route remains 403. Public arbitrary prompts and uploads are disabled. Cookies are Secure, HttpOnly and SameSite Strict.
 
 The persistent ledger reserves conservative cost before each request, including failures/timeouts. Hard limits are $0.50 lifetime reserved usage, 100 model requests, 1,024 output tokens/request, 64 KiB request payload, 20 review attempts globally, two/browser, one concurrent review and November 11, 2026 00:00 UTC expiry. No retry or mock fallback occurs on live failure. Existing additional grants fund usage; no purchase or top-up occurred. Provider prices/workspace settings can change externally. Application expiry stops requests but does not revoke the credential itself; retire it separately when no longer needed. Current receipts establish hosted inference, saved approval, session isolation and write protection.
+
+## October 26 client-only update
+
+The existing running image was retained; `app.js`, `live-review.js` and
+`index.html` are mounted individually read-only from the existing host source
+folder onto `/app/marg/api/static/`. Preserve those mounts when recreating this
+container, or build from the current source after separately authorizing any
+resource use. See CURRENT_VERIFICATION.md for asset hashes and rollback evidence.
+No runtime secret, shared data, allowance limit or model configuration changed.

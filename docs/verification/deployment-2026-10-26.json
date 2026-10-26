@@ -1,0 +1,13 @@
+{
+  "image_id": "sha256:96f83743acfa32c180a4a70a60e5c406e084e08d7784b212745cefe0d1be82bb",
+  "image_tag": "sha256:96f83743acfa32c180a4a70a60e5c406e084e08d7784b212745cefe0d1be82bb",
+  "asset_mode": "three read-only bind mounts on existing image",
+  "public_updated_assets_verified": true,
+  "preserved_reviews_and_ledger": true,
+  "model_requests_before": 31,
+  "model_requests_after": 31,
+  "reserved_usd": 0.318816,
+  "existing_other_services_unchanged": true,
+  "new_paid_resources": 0,
+  "previous_container_retained_stopped_for_rollback": true
+}

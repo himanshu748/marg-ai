@@ -1,0 +1,101 @@
+{
+  "checked_utc": "2026-10-26T06:56:10.800599+00:00",
+  "cookie_or_auth_headers_sent": false,
+  "new_inference_requests": 0,
+  "/api/health": {
+    "status": 200,
+    "body": {
+      "status": "ok",
+      "read_only": true,
+      "storage": "local",
+      "bedrock_enabled": false
+    }
+  },
+  "/api/capabilities": {
+    "status": 200,
+    "body": {
+      "read_only": true,
+      "live_reviews": {
+        "enabled": true,
+        "model_id": "deepseek-ai/DeepSeek-V4.1-Flash",
+        "provider": "Modal",
+        "allowed_surveys": [
+          "pothole_cars",
+          "pothole_kumasi"
+        ],
+        "allowance": {
+          "requests": 31,
+          "reserved_micro_usd": 318816,
+          "limit_micro_usd": 500000,
+          "expires_at": 1794355200,
+          "available": true
+        },
+        "isolated": true,
+        "uploads_enabled": false
+      },
+      "storage": "local",
+      "hosting_label": "AWS Lightsail",
+      "authentication_required": false,
+      "uploads": {
+        "enabled": false,
+        "max_video_bytes": 268435456,
+        "max_gpx_bytes": 5242880,
+        "accepted_video_extensions": [
+          ".avi",
+          ".mkv",
+          ".mov",
+          ".mp4",
+          ".webm"
+        ],
+        "gpx_optional": true
+      },
+      "agent": {
+        "default_mode": "mock",
+        "modes": [
+          "mock"
+        ],
+        "enabled": false,
+        "bedrock_enabled": false,
+        "label": "Deterministic review",
+        "provider": {
+          "kind": "mock",
+          "model_id": null,
+          "region": null,
+          "live_inference": false,
+          "readiness": "offline"
+        },
+        "bedrock": {
+          "kind": "bedrock",
+          "model_id": "us.amazon.nova-pro-v1:0",
+          "region": "us-east-1",
+          "live_inference": false,
+          "readiness": "disabled"
+        }
+      },
+      "processing": {
+        "workers": 1,
+        "capacity": 2,
+        "durable_jobs": true
+      },
+      "privacy": {
+        "available": true,
+        "detail": "Face and plate models loaded; automated redaction requires review"
+      }
+    }
+  },
+  "app.js": {
+    "http_status": 200,
+    "sha256": "2d0dcd77fd6661d403aae832dcb4fcad05d824dd2de3e9c2a4240036c9a6af79",
+    "matches_committed_source": true
+  },
+  "live-review.js": {
+    "http_status": 200,
+    "sha256": "93ee797b2678a5a3f8a1f0006336a0c65083b5d962e25b52790654628dd28d87",
+    "matches_committed_source": true
+  },
+  "index.html": {
+    "http_status": 200,
+    "sha256": "e049cd314d7d63b2a947775ba251e6b785f9da51f601ea8825af1a6d608b63ce",
+    "matches_committed_source": true
+  }
+}
