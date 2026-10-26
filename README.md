@@ -135,6 +135,10 @@ before publishing new evidence; old images are not retroactively corrected.
 
 ## AWS deployment
 
+**Current deployment: AWS Lightsail with optional Modal inference. See
+[the current deployment instructions](docs/JUDGE_DEPLOYMENT.md). The Fargate
+template below is an alternate historical path.**
+
 The public HTTPS sample workbench was reachable on 26 October 2026. AWS
 Lightsail reports its host running in `ap-south-1`; `/api/health` reports
 `status=ok`, `read_only=true`, local storage and Bedrock disabled. This is a
@@ -145,7 +149,7 @@ recorded data and TLS volumes, zero container restarts and 50.6 GB free disk.
 These checks do not guarantee future uptime; retain the existing host and data
 through judging and use the repository/video fallback if unavailable.
 
-The current deployment template defaults to read-only access and deterministic
+The alternate Fargate deployment template defaults to read-only access and deterministic
 review. A writable deployment normally requires HTTPS, a matching dashboard
 domain, and an API token loaded from AWS Secrets Manager. For the judging
 window only, token-authenticated HTTP writes can be enabled explicitly with
@@ -158,8 +162,9 @@ ECR, and CloudWatch Logs. The default task is ARM64 Graviton-compatible,
 1 vCPU and 2 GB memory.
 
 Deployment creates billable resources. Follow [LOCAL_OPERATIONS.md](LOCAL_OPERATIONS.md)
-and validate the template before running `infra/deploy.sh`. These changes have
-not been deployed to AWS or verified with a live Bedrock call.
+and validate the template before running `infra/deploy.sh`. This alternate
+Fargate template has not been deployed or verified with a live Bedrock call;
+the current Lightsail deployment is described above.
 
 For a writable HTTP judging deployment, create a token secret and pass its ARN:
 
