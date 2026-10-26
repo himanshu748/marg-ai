@@ -1,0 +1,369 @@
+{
+  "measured_at_utc": "2026-10-26T06:01:33.038381+00:00",
+  "source_commit": "4b6639b80dd096c7a5bdf71ff7612bec45e8922e",
+  "scope": "CPU detector latency on existing demo keyframes; no accuracy labels",
+  "timed_scope": "letterbox + blob + DNN inference + threshold + NMS; excludes disk IO, model load and privacy pass",
+  "environment": {
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "machine": "x86_64",
+    "python": "3.12.14",
+    "opencv": "5.0.0",
+    "opencv_threads": 1
+  },
+  "model_sha256": "1bb451e4a5e8657030385fa9d1c29e0f88f2db8e38973986d247d044e4f41187",
+  "config": {
+    "frame_stride": 3,
+    "target_width": 960,
+    "blur_min_laplacian_var": 60.0,
+    "exposure_clip_pct_max": 0.25,
+    "keyframe_min_new_ratio": 0.35,
+    "keyframe_max_elapsed_s": 1.5,
+    "orb_nfeatures": 1500,
+    "dnn_input_size": 640,
+    "conf_thresh": 0.25,
+    "nms_iou": 0.45,
+    "classes": [
+      "D00",
+      "D10",
+      "D20",
+      "D40"
+    ],
+    "tracker_iou": 0.3,
+    "tracker_max_unseen_keyframes": 6,
+    "min_observations": 2,
+    "redact": true,
+    "optical_flow_width": 480,
+    "timestamp_offset_s": 0.0,
+    "synthetic_start_lat": 28.6139,
+    "synthetic_start_lon": 77.209,
+    "synthetic_speed_kmh": 30.0,
+    "geo_cluster_radius_m": 25.0,
+    "model_path": "models/rdd_yolov8s.onnx",
+    "road_plane": [
+      [
+        0.15,
+        1.0
+      ],
+      [
+        0.85,
+        1.0
+      ],
+      [
+        0.58,
+        0.62
+      ],
+      [
+        0.42,
+        0.62
+      ]
+    ]
+  },
+  "inputs": [
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00000.jpg",
+      "sha256": "86b4fe4dfaadd817145ad1fb28f4bf0c4c6de9399e15fd069ea1f1810a47d62d"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00001.jpg",
+      "sha256": "c42f7c1174fddca279f7227c61f5af512c951419cfa17d893140d12046aadb77"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00002.jpg",
+      "sha256": "5ad3cd9811910a8894ae8451275baa4c487b57f50dd752e4d7b435295d38b71e"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00003.jpg",
+      "sha256": "4c6fd7c3d94dc47f022644d9f8eb0c07d9361e99b935eb82ab3ab67d23785fc6"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00004.jpg",
+      "sha256": "95ac3e6c335c007aa66ea04bd869fb10409d3e4d8df9af1e376de8568c18c366"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00005.jpg",
+      "sha256": "b3e770ceb56b5f8729a11fe7ef194df26e4efb6b9c7cbabc4d2c0d53df3a2b23"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00006.jpg",
+      "sha256": "8a85e8336e76e9f5938688738ce0897b3f334841e22a1cc84f574b07fcc84420"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00007.jpg",
+      "sha256": "f15eb5c20ab06400d5bedefa96bd44ff07062b9a886d8173d96623e86a7d4eee"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00008.jpg",
+      "sha256": "e81141b66039a701c7d9100ee61bba0fc0e08af8b0a71cd3b0f1c62627edcbca"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00009.jpg",
+      "sha256": "25e62b86a8831c0394bd2690a655002c86aed73737d6640e1863519c4e107351"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00010.jpg",
+      "sha256": "8290fe2d71e1c5c9a67e7e8ee7c20c6fe6c4e28e667814b9784e249418ac2fcb"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00011.jpg",
+      "sha256": "7a53ee3381f7ac66b2c97af8e5c3cfcfe798432044ba25ff0cbd37e530648cf1"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00012.jpg",
+      "sha256": "f3b9fbb483017f3be9b59be8bed2328391b1c47a56d419c6b6afdc3bf91e916f"
+    },
+    {
+      "path": "demo/pothole_cars/keyframes/kf_00013.jpg",
+      "sha256": "8fc3e60b98e87106d9aa3920f8d09dd08c19bd221a8ec0f3ff2fcbdae1b6afd2"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00000.jpg",
+      "sha256": "74c15e4ab8de96e9244d5f82244e7b0f5c055f5e14daeb862ba5fe5f686e18b5"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00001.jpg",
+      "sha256": "cbfc733be7b5494e7d90e1d4b3df2a0f4ec30b2f42c83c35f9e53680cb9cb6e7"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00002.jpg",
+      "sha256": "657a6ba3e8bdfa2c59985ddd911a1d1d06cdd4e0974e19a4791f5311b19a4abc"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00003.jpg",
+      "sha256": "80fb7d16c856af9a07156c9332da92e317b7bf1f28723a37fd2111f99fcc7e93"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00004.jpg",
+      "sha256": "864b2d859405b217c2e1080008604d0d4d600fd9c595cac739d292ccc74e4264"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00005.jpg",
+      "sha256": "006dec79d4463706da38b85cb9fcf979580f6b75406d09a1000610a6184d24f9"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00006.jpg",
+      "sha256": "daba1f80cce7020d1a167a229ed3c1e8e6e78ac42b5c67da2386920225ae7c5f"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00007.jpg",
+      "sha256": "e9c9062b8fce4b0d421d2d9bb12f5ba5206cfb7765d78443ab02ae78936acb5f"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00008.jpg",
+      "sha256": "e2a54b0cd7f751014451393348da9074e327bba7ad30a0931844204be1215747"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00009.jpg",
+      "sha256": "a8f2cce5c6e1ccbbf333be07677f27ade45e4719c26123e704c06c7c8308859e"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00010.jpg",
+      "sha256": "a73d538fc0ec74119efb0976e402d296fbdcee8dad4522c15b58e0c3bfae9d0e"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00011.jpg",
+      "sha256": "5ba6f1cbcf985538e844f5465ac77876b3fb4f8ad7167ad8fb9e88b9def55cc8"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00012.jpg",
+      "sha256": "0957c2ac4e6c85260d72bc43c9ccf9442cf298ac7b27399cddcbafc9be229611"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00013.jpg",
+      "sha256": "b942bab62571823e2f8979a0083e852161eb862ce9dd1caf6662e5e28738e529"
+    },
+    {
+      "path": "demo/pothole_kumasi/keyframes/kf_00014.jpg",
+      "sha256": "30cd2c92df60c04e1d2fa9b94fdeec8903d812fce4dc6a20dd50bd95c5c15122"
+    }
+  ],
+  "unique_images": 29,
+  "repeats": 3,
+  "warmup_calls": 3,
+  "timed_calls": 87,
+  "median_ms": 368.9670160001697,
+  "p95_ms": 399.9964548994285,
+  "images_per_second": 2.674007005967343,
+  "latencies_ms": [
+    371.3734550001391,
+    381.6280420005569,
+    355.91520000070886,
+    370.5336310003986,
+    390.7684700006939,
+    383.94631600021967,
+    415.4843020005501,
+    381.2151130005077,
+    386.4279950003038,
+    385.0821989999531,
+    491.38524400041206,
+    365.5488439999317,
+    376.55587999961426,
+    387.73838999986765,
+    375.5666970000675,
+    429.99691300065024,
+    366.39426100009587,
+    364.46384800001397,
+    368.9670160001697,
+    382.9233940004997,
+    381.2341209995793,
+    397.2246949997498,
+    384.93982199997845,
+    373.07695999970747,
+    356.0079089993451,
+    353.78747600043425,
+    349.89615399990726,
+    376.891567999337,
+    358.02447800051596,
+    354.0519389998735,
+    360.3091160002805,
+    361.3765890004288,
+    356.77587899954233,
+    378.0135440001686,
+    363.1635029996687,
+    370.75247899974784,
+    363.8572039999417,
+    379.57572899995284,
+    377.9796629996781,
+    373.44158700034313,
+    373.48230899988266,
+    359.02403599993704,
+    356.78343099971244,
+    361.6992830002346,
+    353.6306770001829,
+    354.91708799963817,
+    386.89252299991495,
+    385.99760300076014,
+    391.37094000034267,
+    372.57767600021907,
+    371.4638860001287,
+    372.05994200030545,
+    385.1637159996244,
+    378.4031339991998,
+    378.24975099920266,
+    359.3811310001911,
+    364.57404300017515,
+    361.97592400003487,
+    359.8600149998674,
+    353.5944719997133,
+    365.1604509996105,
+    358.1797839997307,
+    367.8985050000847,
+    360.75793100008013,
+    358.0181930001345,
+    360.23930800001835,
+    363.1737820005583,
+    401.1843519992908,
+    396.7528749999474,
+    357.5680830008423,
+    361.5389319993483,
+    363.1152150001071,
+    359.457117000602,
+    359.57905200029927,
+    355.9958590003589,
+    393.20570200015936,
+    367.1560250004404,
+    381.2550390002798,
+    460.0590600002761,
+    364.19603600006667,
+    367.01758399976825,
+    385.41467699997156,
+    383.66689600024984,
+    375.69071799953235,
+    364.1778589999376,
+    359.936531999665,
+    361.64928400012286
+  ],
+  "detections_per_call": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1
+  ],
+  "limitations": [
+    "Existing demonstration images, not a held-out evaluation",
+    "Shared local host, not the deployed AWS/Modal environment",
+    "No claim of updated AP, precision, recall, COOL or live-review latency"
+  ]
+}

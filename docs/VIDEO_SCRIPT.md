@@ -1,122 +1,54 @@
-# MargAI five-minute demo script
+# Results-first MargAI demo script
 
-This script demonstrates the local, reproducible path. It does not imply that
-the AWS stack is currently live.
+This is a replacement recording plan. It does not verify the current saved
+3:14.6 submission video. Before replacing that video, watch it anonymously from
+start to finish and confirm every team member appears. Do not invent a team
+member or present a prerecorded run as live inference.
 
-## 0:00–0:25 — Problem and architecture
+## First minute
 
-**On screen:** Open `docs/architecture.png`, then show the dashboard home page.
+| Time | Picture | Spoken point |
+| --- | --- | --- |
+| 0:00-0:10 | Every team member on camera, with name and actual contribution | Each member introduces themselves. A solo entrant appears and introduces themselves. |
+| 0:10-0:25 | Kumasi survey: 96 frame detections, three retained instances; select evidence | MargAI compresses repeated road-damage sightings into evidence a person can review. Location is synthetic and area is estimated. |
+| 0:25-0:40 | Review activity: dismissal after inspection, work-order draft, approval request | Visual evidence changes what happens next. An unconfirmed detection is dismissed and actionable damage becomes an approval-gated draft. |
+| 0:40-0:55 | Fresh latency table beside the historical accuracy table | State the 26 October median and p95 detector timings from `FRESH_LATENCY.md`. Clearly label September accuracy as historical. |
+| 0:55-1:00 | Work orders, with approval gate and evidence | This is a recorded deterministic review. It needs no live inference credits and never dispatches repairs. |
 
-**Voice-over:** “MargAI turns dashcam footage into an auditable road-damage
-survey. OpenCV 5 detects and tracks damage, an agent investigates uncertain
-cases, and a human approves any municipal work order.”
+## 1:00-1:40: show the actual workflow
 
-```bash
-cd /home/ubuntu/repos/marg-ai
-```
+Open another defect, compare keyframes, then show the recorded tool trace.
+Point to the OpenCV output that caused an inspection, dismissal, resurvey or
+work-order action. Use actual artifact contents; do not read invented counts.
+Distinguish deterministic policy orchestration from any separately recorded
+live model trace. No paid review is needed for this walkthrough.
 
-## 0:25–1:05 — Run the vision pipeline
+## 1:40-2:15: show AWS delivery and responsible control
 
-**On screen:** Terminal running the pipeline, then the output directory.
+Show the HTTPS dashboard and health response, then the architecture. Identify
+the current Lightsail deployment separately from the old Fargate template.
+Show the human approval gate, read-only public workspace, synthetic GPS label,
+privacy limitations and the fact that approval does not dispatch a repair.
 
-**Voice-over:** “The pipeline reads video timing and optional GPS, filters
-poor-quality frames, selects stable keyframes, detects the four RDD2022
-classes, tracks observations, estimates severity, and saves evidence. Its
-OpenCV 5 YuNet privacy pass tiles the frame for small plates and pixelates
-detected faces and plates, including where they overlap damage boxes.”
+## 2:15-2:50: show failure handling and reproducibility
 
-```bash
-/home/ubuntu/venv/bin/python -m marg.vision.pipeline \
-  --video /home/ubuntu/assets/cars_moving_into_pothole_CC_BY_SA_4.0.webm \
-  --out outputs/pothole_cars
-```
+Show a difficult detection, the recorded audit and repository fallback.
+Explain that the new latency run measures existing demo keyframes, not fresh
+held-out accuracy. Show the pinned dependencies and reproduction command.
 
-## 1:05–1:35 — Start the agent
+## 2:50-3:15: close with the outcome and award path
 
-**On screen:** Agent trace JSONL and the generated agent result.
+Return to the evidence and repair draft. State: "We opt into the Agentic Vision
+Award: perception changes subsequent inspections and actions, and a person
+retains the final decision." Point to the public source and recorded-evidence
+guide. Keep the full recording below the competition's five-minute limit.
 
-**Voice-over:** “The local MockLLM follows the same policy shape as the
-Bedrock wrapper. It inspects low-confidence cases, compares inconsistent
-frames, drafts work orders, requests approval for high and medium priority,
-and finalizes within a 25-tool-call budget.”
+## Release verification
 
-```bash
-/home/ubuntu/venv/bin/python -m marg.agent.loop \
-  --result outputs/pothole_cars/result.json \
-  --llm mock \
-  --out outputs/pothole_cars/agent
-```
+- Every team member visibly appears and gives their real contribution.
+- Results are visible before 1:00.
+- The actual video link plays anonymously from start to finish.
+- The video saved on the hackathon entry is the intended version.
+- The optional award selection is saved in the submission form.
 
-## 1:35–2:25 — Explore the dashboard
-
-**On screen:** Survey selector, map, instance table, evidence thumbnail, and
-the Agent trace tab.
-
-**Voice-over:** “Each tracked instance has a confidence, class, severity,
-location, observation history, and a best-observation evidence frame. The
-trace makes the agent's tool calls reviewable rather than hiding them behind
-a single answer.”
-
-```bash
-/home/ubuntu/venv/bin/python -m marg.api \
-  --data outputs \
-  --port 8000
-```
-
-Open `http://localhost:8000`, select `pothole_cars`, and show the Instances
-and Agent trace tabs.
-
-## 2:25–3:05 — Review and approve a work order
-
-**On screen:** Work orders tab, evidence thumbnail, reason, severity, and
-OpenStreetMap link.
-
-**Voice-over:** “The agent drafts a repair recommendation with affected
-instances, evidence, area, severity, GPS, and a reason. It cannot approve the
-work itself. The operator can inspect the evidence and approve or reject the
-draft.”
-
-Click **Approve** on a pending work order and show the persisted status.
-
-## 3:05–3:45 — Show the evaluation evidence
-
-**On screen:** Detector and deduplication Markdown reports.
-
-**Voice-over:** “The detector evaluation uses 600 labelled India images.
-All-point AP at IoU 0.5 is 0.7390 mAP. At the production threshold, precision
-is 0.8376 and recall is 0.6974. The demos show why tracking matters: 96
-detections become three tracked instances in the Kumasi clip.”
-
-```bash
-cat eval/results/detector_india.md
-cat eval/results/dedupe.md
-```
-
-## 3:45–4:20 — Show failure cases and policy tests
-
-**On screen:** `docs/failures/` thumbnails, then the agent evaluation table.
-
-**Voice-over:** “The failure cases expose glare, haze, shadows, clutter, and
-vehicle occlusion. The responsible response is not to hide these failures:
-the dashboard keeps evidence visible and the approval gate remains in place.”
-
-```bash
-cat docs/failures/README.md
-/home/ubuntu/venv/bin/python eval/eval_agent.py --llm mock
-```
-
-## 4:20–5:00 — Close with reproducibility and limitations
-
-**On screen:** README local quickstart and CloudFormation file.
-
-**Voice-over:** “The same data contract is prepared for S3, SQS, DynamoDB,
-Fargate Graviton, and an ALB. A historical AWS deployment was removed for budget
-control. This demo uses local results and does not establish current cloud readiness.
-Future work includes
-stronger privacy recall on small or distant plates, real GPS validation,
-calibrated severity, and a matched Graviton benchmark. COOL was not run.”
-
-```bash
-/home/ubuntu/venv/bin/ruff check .
-/home/ubuntu/venv/bin/python -m pytest -q
-```
+These are checks to perform, not claims that they have already passed.

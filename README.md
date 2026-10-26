@@ -7,12 +7,20 @@ OpenCV 5 pipeline over dashcam video to find cracks and potholes, merges repeat
 sightings of the same defect, keeps privacy-redacted evidence frames, and lets
 an approval-gated agent draft municipal work orders that a person must approve.
 
-Entry for the **OpenCV AI Competition 2026, powered by AWS**. Final submissions are due 26 October 2026, 23:59 PT
-(27 October, 12:29 IST).
+Entry for the **OpenCV AI Competition 2026, powered by AWS**. Use the earlier
+Devpost cutoff: **27 October 2026, 12:15 PM IST** (26 October, 11:45 PM PDT).
+The overview lists 11:59 PM PT, so do not rely on the extra 14 minutes.
 
-The local workbench supports video upload, evidence review, policy traces, and
-human decisions while Bedrock access is pending. Its default review mode is
-deterministic; it does not claim live model reasoning.
+**Special-award opt-in: Agentic Vision Award.** Visual evidence changes later
+inspection, dismissal, resurvey and work-order actions; every repair draft
+retains a human approval gate. The evidence guide below maps these claims
+to recorded traces. The submission award field was saved as Agentic Vision Award on 26 October
+2026; Devpost confirmed that the entry remains Submitted.
+
+The workbench supports video upload, evidence review, policy traces, and
+human decisions. Its recorded review mode is deterministic and does not claim
+live model reasoning. The hosted demo also exposes an optional live review;
+judges can inspect the recorded evidence without starting it.
 
 ## For judges
 
@@ -20,10 +28,28 @@ deterministic; it does not claim live model reasoning.
 | --- | --- |
 | Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 | Architecture diagram | [docs/architecture.png](docs/architecture.png) ([SVG](docs/architecture.svg), [notes](docs/ARCHITECTURE.md)) |
-| Demo video (≤5 min) | _add the public or unlisted link_ |
-| Live endpoint | _not currently deployed; the 2026-09-07 AWS stack was torn down (see [AWS deployment](#aws-deployment))_ |
+| Demo video (≤5 min) | [Submitted video (3:15)](https://youtu.be/yJ_DOt6JkOA); team appearance and first-minute results still require playback verification; [results-first recording script](docs/VIDEO_SCRIPT.md) |
+| Live endpoint | [Open recorded Kumasi survey](https://margai.13.204.212.172.sslip.io/?survey=pothole_kumasi), checked 26 October; see [judge guide](docs/JUDGING_GUIDE.md) |
+| Fresh measurement | [26 October latency table](docs/FRESH_LATENCY.md): 368.97 ms median, 400.00 ms p95 over 87 calls |
 | Evaluation and failure cases | [Evaluation and tests](#evaluation-and-tests), [docs/BENCHMARK.md](docs/BENCHMARK.md), [docs/failures/](docs/failures/) |
 | Pinned dependencies | [constraints/api.txt](constraints/api.txt) (runtime) and [constraints/dev.txt](constraints/dev.txt) (tests), resolved for Python 3.10+ |
+
+### Recorded evidence first, no inference credits required
+
+1. Open the sample survey above and inspect the three retained defects from
+   96 frame detections. GPS and area are explicitly illustrative estimates.
+2. Click **Review activity** in the sidebar. The recorded Kumasi audit shows
+   **8 tool calls and 6/6 policy checks passed**, including dismissal after
+   re-inspection and human approval requests.
+3. Click **Work orders** to inspect linked evidence and the recorded decisions.
+   **Export activity** and **Export report** preserve the evidence locally.
+
+These actions read stored results. **Run live review** is optional and consumes
+inference credits; the recorded path remains useful without it. If the server
+is unavailable, use the [repository evidence fallback](docs/JUDGING_GUIDE.md)
+or the local read-only quickstart in that guide. Availability was checked at a
+point in time, not guaranteed for the entire judging window. The hosted app
+contains changes that are not yet synchronized to this checkout.
 
 ![Annotated pothole survey](docs/samples/pothole_cars_annotated.gif)
 
@@ -107,6 +133,14 @@ before publishing new evidence; old images are not retroactively corrected.
 
 ## AWS deployment
 
+The public HTTPS sample workbench was reachable on 26 October 2026. AWS
+Lightsail reports its host running in `ap-south-1`; `/api/health` reports
+`status=ok`, `read_only=true`, local storage and Bedrock disabled. This is a
+separate deployment from the historical Fargate stack described below.
+The recorded browser flow loads evidence, review activity and work orders
+without authentication or live inference. Host-side restart, backup and
+end-of-judging retention checks still require SSH/operator access.
+
 The current deployment template defaults to read-only access and deterministic
 review. A writable deployment normally requires HTTPS, a matching dashboard
 domain, and an API token loaded from AWS Secrets Manager. For the judging
@@ -136,9 +170,8 @@ The token travels in plaintext over HTTP; use this only for the judging window.
 ### Deployment evidence — 2026-09-07
 
 PR #5, commit `f5fb1d4`, recorded an ARM64 Fargate deployment in `us-east-1`
-and reported that the stack was later torn down to save budget. There is no
-current live deployment claimed here. Redeployment requires separate approval
-and fresh endpoint checks; this historical record does not validate the current patch.
+and reported that the stack was later torn down to save budget. That historical Fargate deployment is not the current Lightsail demo.
+This historical record does not validate the current deployment or patch.
 
 ![Historical ALB dashboard screenshot, 2026-09-07](docs/samples/aws_dashboard.png)
 
@@ -162,6 +195,16 @@ Recorded task: RUNNING, 1024 CPU / 2048 MiB, Linux ARM64, Fargate 1.4.0
 
 The historical x86 vs Graviton4 benchmark uses stock OpenCV wheels and is
 documented in [docs/BENCHMARK.md](docs/BENCHMARK.md). It does not measure COOL.
+
+### Fresh latency check, 26 October 2026
+
+The current OpenCV 5 detector was timed on **29 committed sample keyframes**,
+three passes after three warm-up calls, with one CPU thread. Median latency
+was **368.97 ms**, p95 **400.00 ms**, and sequential
+throughput **2.67 images/s** on an AMD EPYC 9V74 shared x86_64 host.
+These are detector-only timings, excluding privacy and agent work, and do not
+update detector accuracy. [Method and limitations](docs/FRESH_LATENCY.md),
+[raw timings and hashes](eval/results/fixture_latency_2026-10-26.json).
 
 ### Historical detector evaluation
 
