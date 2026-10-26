@@ -1,0 +1,20 @@
+[
+  {
+    "filename": "face_detection_yunet_2023mar.onnx",
+    "bytes": 232589,
+    "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
+    "url": "https://media.githubusercontent.com/media/himanshu748/marg-ai/4b6639b80dd096c7a5bdf71ff7612bec45e8922e/models/face_detection_yunet_2023mar.onnx"
+  },
+  {
+    "filename": "license_plate_detection_lpd_yunet_2023mar.onnx",
+    "bytes": 4146213,
+    "sha256": "6d4978a7b6d25514d5e24811b82bfb511d166bdd8ca3b03aa63c1623d4d039c7",
+    "url": "https://media.githubusercontent.com/media/himanshu748/marg-ai/4b6639b80dd096c7a5bdf71ff7612bec45e8922e/models/license_plate_detection_lpd_yunet_2023mar.onnx"
+  },
+  {
+    "filename": "rdd_yolov8s.onnx",
+    "bytes": 44724010,
+    "sha256": "1bb451e4a5e8657030385fa9d1c29e0f88f2db8e38973986d247d044e4f41187",
+    "url": "https://media.githubusercontent.com/media/himanshu748/marg-ai/4b6639b80dd096c7a5bdf71ff7612bec45e8922e/models/rdd_yolov8s.onnx"
+  }
+]

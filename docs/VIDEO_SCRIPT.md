@@ -1,3 +1,5 @@
+Existing recording checked on 26 October: see [actual video verification](VIDEO_VERIFICATION.md). The script below remains a proposed replacement, not a completed recording.
+
 # Results-first MargAI demo script
 
 This is a replacement recording plan. It does not verify the current saved

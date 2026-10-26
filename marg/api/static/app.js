@@ -124,10 +124,12 @@ function reviewState() {
 function renderReviewBrief() {
   if (!state.result) return;
   const s = reviewState();
-  $("nextStepTitle").textContent = state.busy ? "Review work is in progress" : s.next.title;
-  $("nextStepDetail").textContent = state.busy ? "Keep exploring the saved evidence. Decisions unlock after the review completes and its policy checks pass." : s.next.detail;
-  $("nextStepAction").textContent = s.next.label;
-  $("nextStepAction").disabled = state.busy || (s.next.action === "review" && isReadonly());
+  const recorded = state.caps?.read_only;
+  const next = recorded ? {title:"Inspect the recorded evidence",detail:"View the stored OpenCV tool trace, policy checks and work orders without using inference credits. Live review below is optional.",label:"View recorded review"} : s.next;
+  $("nextStepTitle").textContent = state.busy ? "Review work is in progress" : next.title;
+  $("nextStepDetail").textContent = state.busy ? "Keep exploring the saved evidence. Decisions unlock after the review completes and its policy checks pass." : next.detail;
+  $("nextStepAction").textContent = next.label;
+  $("nextStepAction").disabled = state.busy || (!recorded && s.next.action === "review" && isReadonly());
   $("stepEvidence").className = "complete";
   $("stepReview").className = s.valid ? "complete" : "current";
   $("stepReview").textContent = s.valid ? "2 · Policy checks passed" : "2 · Checked review needed";
@@ -143,9 +145,9 @@ function applyCapabilities() {
   $("emptyUpload").disabled = $("newSurvey").disabled;
   $("runReview").disabled = isReadonly() || !state.result || state.busy;
   $("modeBadge").innerHTML =
-    `<span></span>${c.read_only ? "Read-only workspace" : c.agent?.bedrock_enabled ? "Bedrock enabled" : "Local review"}`;
+    `<span></span>${c.read_only ? "Recorded judge demo" : c.agent?.bedrock_enabled ? "Bedrock enabled" : "Local review"}`;
   $("storageLabel").textContent =
-    c.storage === "aws" ? "AWS workspace" : "Local workspace";
+    c.hosting_label || (c.storage === "aws" ? "AWS workspace" : "Local workspace");
   $("accessButton").hidden = !c.authentication_required;
   $("accessButton").textContent = state.authenticated
     ? "Lock workspace"
@@ -165,7 +167,7 @@ function applyCapabilities() {
     .querySelectorAll("[data-decision]")
     .forEach((button) => (button.disabled = isReadonly() || state.busy || !MargReview.validReview(state.agent)));
   $("reviewDescription").textContent = c.read_only
-    ? "This workspace is read-only. Existing evidence and review records are available to inspect."
+    ? c.live_reviews?.enabled ? "Recorded evidence is read-only and free to inspect. Optional live review below uses inference credits." : "This workspace is read-only. Existing evidence and review records are available to inspect."
     : "Run a deterministic review to inspect uncertainty and prepare work orders.";
   $("videoHint").textContent =
     `MP4, MOV, AVI, MKV or WebM · up to ${number((c.uploads?.max_video_bytes || 268435456) / 1048576)} MB`;
@@ -316,7 +318,8 @@ async function selectSurvey(id) {
     renderOrders();
     renderTrace();
     applyCapabilities();
-    $("provenanceLabel").textContent = providerLabel();
+    $("provenanceLabel").textContent =
+      (state.caps?.live_reviews ? "Recorded survey · " : "") + providerLabel();
     if (agent?.error)
       notify(
         agent.error.message ||
@@ -961,6 +964,10 @@ $("uncertainFilter").addEventListener("click", () => {
   renderDefects();
 });
 $("nextStepAction").addEventListener("click", () => {
+  if (state.caps?.read_only) {
+    switchView("activity");
+    return;
+  }
   const action = reviewState().next.action;
   if (action === "review") runReview();
   else {

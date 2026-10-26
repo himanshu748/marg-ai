@@ -65,9 +65,17 @@ def create_app(data_root: Path | str) -> FastAPI:
         runtime.recover()
         yield
         runtime.shutdown()
+        if getattr(application.state, "live_reviews", None):
+            application.state.live_reviews.executor.shutdown(wait=False)
 
     app = FastAPI(title="MargAI Survey Workbench", lifespan=lifespan)
     app.state.jobs = runtime
+    if os.environ.get("MARG_LIVE_DEMO_ENABLED") == "1":
+        from marg.api.live_demo import LiveReviews
+
+        live = LiveReviews(root, Path(os.environ["MARG_LIVE_DATA_ROOT"]), _run_agent)
+        live.install(app)
+        app.state.live_reviews = live
     install_auth(app, token, os.environ.get("MARG_COOKIE_SECURE") == "1")
 
     @app.middleware("http")
@@ -265,7 +273,9 @@ def create_app(data_root: Path | str) -> FastAPI:
     def capabilities() -> dict[str, object]:
         return {
             "read_only": read_only,
+            "live_reviews": app.state.live_reviews.status() if getattr(app.state, "live_reviews", None) else None,
             "storage": "aws" if s3_store else "local",
+            "hosting_label": os.environ.get("MARG_HOSTING_LABEL"),
             "authentication_required": bool(token),
             "uploads": {
                 "enabled": not read_only and (s3_store is None or bool(queue_url)),

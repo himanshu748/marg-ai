@@ -58,7 +58,7 @@ Open `http://localhost:8000/?survey=pothole_kumasi`. This serves the existing
 fixtures. No new survey processing or agent request is needed. The web assets,
 including fonts and Leaflet, are vendored; optional map tiles require network.
 
-## Judging-window operations still to verify
+## Judging-window operations
 
 Point-in-time health and browser checks cannot guarantee uptime through
 9 November. Before the cutoff, the host operator should confirm service restart
@@ -67,6 +67,9 @@ renewal and retention through the end of judging. Preserve the recorded route
 when live-review credits are depleted. The current public host is AWS Lightsail
 in `ap-south-1`; the September Fargate stack is historical.
 
-The deployed source has additional commits and a Modal patch not present in
-this GitHub checkout. Synchronizing those changes and checking the saved
-Devpost video and team appearance remain separate gates.
+The reviewed Modal implementation and evidence workflow are included in this
+checkout. On 26 October, host inspection confirmed restart-unless-stopped,
+persistent data and TLS volumes, zero container restarts and 50.6 GB free disk.
+Future availability still depends on retaining the existing host through judging.
+See [video verification](VIDEO_VERIFICATION.md) for the actual saved video's
+team credit and results timing; no replacement video has been claimed.

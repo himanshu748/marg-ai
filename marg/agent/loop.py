@@ -14,9 +14,9 @@ from marg.vision.models import SurveyResult
 
 from .llm import (
     LLM,
-    BedrockUnavailable,
     LLMResponse,
     MockLLM,
+    ProviderUnavailable,
     ToolCall,
     default_llm,
     provider_details,
@@ -131,7 +131,7 @@ def run_agent(
         if not registry.finalized:
             registry.finalize("budget exhausted")
             forced_finalize = True
-    except BedrockUnavailable as exc:
+    except ProviderUnavailable as exc:
         status = "unavailable"
         error = exc.to_dict()
         trace.append("provider_error", {}, error, 0.0)
@@ -219,7 +219,7 @@ def _finalize_response(llm: LLM, messages: list[dict[str, object]], trace: Trace
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the MargAI survey agent.")
     parser.add_argument("--result", required=True)
-    parser.add_argument("--llm", choices=["mock", "bedrock"], default="mock")
+    parser.add_argument("--llm", choices=["mock", "bedrock", "modal"], default="mock")
     parser.add_argument("--out", required=True)
     args = parser.parse_args()
     output_dir = Path(args.out)
@@ -238,7 +238,7 @@ def main() -> None:
         )
         llm = default_llm(args.llm)
         run = run_agent(result, llm, context)
-    except BedrockUnavailable as exc:
+    except ProviderUnavailable as exc:
         print(str(exc), file=sys.stderr)
         raise SystemExit(2) from exc
     run.trace.write_jsonl(output_dir / "trace.jsonl")

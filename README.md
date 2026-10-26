@@ -28,7 +28,7 @@ judges can inspect the recorded evidence without starting it.
 | --- | --- |
 | Technical report | [docs/TECHNICAL_REPORT.md](docs/TECHNICAL_REPORT.md) |
 | Architecture diagram | [docs/architecture.png](docs/architecture.png) ([SVG](docs/architecture.svg), [notes](docs/ARCHITECTURE.md)) |
-| Demo video (≤5 min) | [Submitted video (3:15)](https://youtu.be/yJ_DOt6JkOA); team appearance and first-minute results still require playback verification; [results-first recording script](docs/VIDEO_SCRIPT.md) |
+| Demo video (≤5 min) | [Submitted video (3:15)](https://youtu.be/yJ_DOt6JkOA); [verified team credit and first-minute results](docs/VIDEO_VERIFICATION.md) |
 | Live endpoint | [Open recorded Kumasi survey](https://margai.13.204.212.172.sslip.io/?survey=pothole_kumasi), checked 26 October; see [judge guide](docs/JUDGING_GUIDE.md) |
 | Fresh measurement | [26 October latency table](docs/FRESH_LATENCY.md): 368.97 ms median, 400.00 ms p95 over 87 calls |
 | Evaluation and failure cases | [Evaluation and tests](#evaluation-and-tests), [docs/BENCHMARK.md](docs/BENCHMARK.md), [docs/failures/](docs/failures/) |
@@ -49,7 +49,9 @@ inference credits; the recorded path remains useful without it. If the server
 is unavailable, use the [repository evidence fallback](docs/JUDGING_GUIDE.md)
 or the local read-only quickstart in that guide. Availability was checked at a
 point in time, not guaranteed for the entire judging window. The hosted app
-contains changes that are not yet synchronized to this checkout.
+uses the Modal review implementation included in this checkout. See the
+[current architecture](docs/current-architecture.png) and
+[deployment reproduction notes](docs/JUDGE_DEPLOYMENT.md).
 
 ![Annotated pothole survey](docs/samples/pothole_cars_annotated.gif)
 
@@ -138,8 +140,10 @@ Lightsail reports its host running in `ap-south-1`; `/api/health` reports
 `status=ok`, `read_only=true`, local storage and Bedrock disabled. This is a
 separate deployment from the historical Fargate stack described below.
 The recorded browser flow loads evidence, review activity and work orders
-without authentication or live inference. Host-side restart, backup and
-end-of-judging retention checks still require SSH/operator access.
+without authentication or live inference. On 26 October, host inspection confirmed restart-unless-stopped, persistent
+recorded data and TLS volumes, zero container restarts and 50.6 GB free disk.
+These checks do not guarantee future uptime; retain the existing host and data
+through judging and use the repository/video fallback if unavailable.
 
 The current deployment template defaults to read-only access and deterministic
 review. A writable deployment normally requires HTTPS, a matching dashboard

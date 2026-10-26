@@ -11,8 +11,8 @@ from .policy import escalation_priority
 from .prompts import FINALIZE_INSTRUCTION, SYSTEM_PROMPT
 
 
-class BedrockUnavailable(RuntimeError):
-    """Raised when Bedrock cannot service a Converse request."""
+class ProviderUnavailable(RuntimeError):
+    """Raised when a configured model cannot service a review request."""
 
     def __init__(self, message: str, code: str = "BedrockUnavailable", retryable: bool = False):
         super().__init__(message)
@@ -21,6 +21,10 @@ class BedrockUnavailable(RuntimeError):
 
     def to_dict(self) -> dict[str, object]:
         return {"code": self.code, "message": str(self), "retryable": self.retryable}
+
+
+class BedrockUnavailable(ProviderUnavailable):
+    """Backward-compatible Bedrock error type."""
 
 
 @dataclass(slots=True)
@@ -328,14 +332,19 @@ def _bounded_integer(name: str, default: int, minimum: int, maximum: int) -> int
 def provider_kind(kind: str | None = None) -> str:
     selected = kind or os.environ.get("MARG_AGENT_LLM") or os.environ.get("MARG_LLM")
     selected = selected or ("bedrock" if os.environ.get("MARG_BEDROCK_MODEL_ID") else "mock")
-    if selected not in {"mock", "bedrock"}:
-        raise ValueError("Agent provider must be mock or bedrock")
+    if selected not in {"mock", "bedrock", "modal"}:
+        raise ValueError("Agent provider must be mock, bedrock or modal")
     return selected
 
 
 def provider_status(kind: str | None = None) -> dict[str, object]:
     """Describe configuration without invoking a model or probing credentials."""
     selected = provider_kind(kind)
+    if selected == "modal":
+        from .modal_llm import MODEL
+
+        return {"kind": "modal", "model_id": MODEL, "region": "us-west", "live_inference": False,
+                "readiness": "unverified" if os.environ.get("MARG_MODAL_ENABLED") == "1" else "disabled"}
     return {
         "kind": selected,
         "model_id": os.environ.get("MARG_BEDROCK_MODEL_ID", "us.amazon.nova-pro-v1:0") if selected == "bedrock" else None,
@@ -346,6 +355,10 @@ def provider_status(kind: str | None = None) -> dict[str, object]:
 
 
 def provider_details(llm: LLM) -> dict[str, object]:
+    from .modal_llm import ModalLLM
+
+    if isinstance(llm, ModalLLM):
+        return llm.details()
     if isinstance(llm, MockLLM):
         return {"kind": "mock", "model_id": None, "region": None, "live_inference": False}
     if isinstance(llm, BedrockLLM):
@@ -354,6 +367,11 @@ def provider_details(llm: LLM) -> dict[str, object]:
 
 
 def default_llm(kind: str | None = None) -> LLM:
-    if provider_kind(kind) == "mock":
+    selected = provider_kind(kind)
+    if selected == "modal":
+        from .modal_llm import ModalLLM
+
+        return ModalLLM()
+    if selected == "mock":
         return MockLLM()
     return BedrockLLM()

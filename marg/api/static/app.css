@@ -47,6 +47,23 @@
   --radius: 12px;
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+.live-demo {
+  margin-top: 20px;
+  padding: 20px;
+  border: 1px solid var(--accent);
+  border-radius: 14px;
+  background: var(--surface);
+  min-width: 0;
+}
+.live-demo > p { color: var(--muted); margin: 10px 0 16px; }
+.live-demo .run-controls { flex-wrap: wrap; }
+.live-demo textarea { width: 100%; margin: 8px 0; }
+.live-demo pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+.live-demo .order { margin: 16px 0; display: block; }
+.live-orders { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 700px) { .live-orders { grid-template-columns: 1fr; } }
+.live-demo .timeline { padding-left: 0; }
 * {
   box-sizing: border-box;
 }

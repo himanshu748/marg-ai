@@ -11,11 +11,12 @@
     <title>MargAI — Survey review</title>
     <link rel="icon" href="/static/mark.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/vendor/leaflet.css" />
-    <link rel="stylesheet" href="/static/app.css?v=review-experience-1" />
+    <link rel="stylesheet" href="/static/app.css?v=modal-live-3" />
     <script src="/static/vendor/leaflet.js" defer></script>
     <script src="/static/review-model.js" defer></script>
     <script src="/static/report.js" defer></script>
-    <script src="/static/app.js?v=review-experience-1" defer></script>
+    <script src="/static/app.js?v=cutoff-recorded-20261026" defer></script>
+    <script src="/static/live-review.js?v=cutoff-recorded-20261026" defer></script>
   </head>
   <body>
     <!-- MargAI survey workbench. Operate mode: preserve the existing dark slate and teal identity; foreground recorded evidence and explicit human decisions. The first viewport joins one selected frame with a scannable defect list. Location, estimates, and provider provenance stay visible. No live-inference claim without runtime evidence. -->
@@ -304,8 +305,20 @@
                       </button>
                     </div>
                   </div>
+
                 </section>
               </div>
+                  <section id="liveReviewSection" class="live-demo" aria-labelledby="liveHeading" hidden>
+                    <h3 id="liveHeading">Optional live DeepSeek review</h3>
+                    <p>Recorded evidence above can be inspected without inference credits. Starting this optional live review uses the shared inference allowance. Your decisions stay private to this browser; no repair is dispatched.</p>
+                    <div class="run-controls">
+                      <label for="liveSurvey">Sample survey</label>
+                      <select id="liveSurvey"><option value="pothole_kumasi">Pothole Kumasi</option><option value="pothole_cars">Pothole Cars</option></select>
+                      <button id="runLiveReview" class="button primary" type="button">Run live review (uses credits)</button>
+                    </div>
+                    <p id="liveStatus" role="status" aria-live="polite">DeepSeek V4.1 Flash on Modal · live inference</p>
+                    <div id="liveResult"></div>
+                  </section>
             </section>
             <section id="ordersView" class="view-panel" hidden>
               <div class="section-heading">

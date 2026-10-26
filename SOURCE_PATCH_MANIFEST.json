@@ -1,0 +1,53 @@
+{
+  "base_commit": "9554e0020584b629d4aaed0a8a34fb2db957c472",
+  "patch_committed": true,
+  "changed_application_files": [
+    {
+      "path": "marg/agent/llm.py",
+      "sha256": "95a466e60d7d5951aaf205315d0a9a239c3f829ea8b606a95da97eaf0d4477e2"
+    },
+    {
+      "path": "marg/agent/loop.py",
+      "sha256": "969f2ec2709b6b625de264a620aee62786653325ab89bc6d5f54028300503e13"
+    },
+    {
+      "path": "marg/agent/modal_llm.py",
+      "sha256": "bde645885b07dc6b78bd56faaadc06664d15ebaafa4ed607647f8852499f26e0"
+    },
+    {
+      "path": "marg/api/app.py",
+      "sha256": "582365d591d8bf3817b536af634c56d933380f5fafaaff7777c6aee0cf8b1578"
+    },
+    {
+      "path": "marg/api/live_demo.py",
+      "sha256": "7fadbc6179e710e1d6924a472628cde10de7626d7073105160bc55975f685122"
+    },
+    {
+      "path": "marg/api/static/app.css",
+      "sha256": "ea90602d5817df3fdbddd68ac0131bab8d0a4e6565be187d47965044c858ca1b"
+    },
+    {
+      "path": "marg/api/static/app.js",
+      "sha256": "2d0dcd77fd6661d403aae832dcb4fcad05d824dd2de3e9c2a4240036c9a6af79",
+      "archived_sha256": "657f14cb1fdb5a6f00ba137941051dc8578d0a69abb0f29302bb5dd981c8e2c8"
+    },
+    {
+      "path": "marg/api/static/index.html",
+      "sha256": "e049cd314d7d63b2a947775ba251e6b785f9da51f601ea8825af1a6d608b63ce",
+      "archived_sha256": "84e1a854f2d8e7bdbd78c58966a2bc8bd93d385d3f906b16e7d93fd0031ff7c9"
+    },
+    {
+      "path": "marg/api/static/live-review.js",
+      "sha256": "93ee797b2678a5a3f8a1f0006336a0c65083b5d962e25b52790654628dd28d87"
+    },
+    {
+      "path": "tests/test_live_demo.py",
+      "sha256": "70197b8fd248ae03f4ca1dd444848bee4c38f9f6c5207f8a0faebbba7fb23995"
+    },
+    {
+      "path": "tests/test_modal_llm.py",
+      "sha256": "7c5b7f3eb1360a8e4a4258e86e0acb585ac6db48b9894b9c4dc289ca0cb9b263"
+    }
+  ],
+  "provenance": "Imported from the reviewed October 22 source, with October 26 recorded-first UI changes. Files are tracked in Git."
+}
